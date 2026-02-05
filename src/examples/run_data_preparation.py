@@ -22,8 +22,8 @@ def main():
     XML_FILE = DATA_DIR / "camera_data" / "topology_0" / "C0989M01.XML"
     SENSOR_FILE = DATA_DIR / "vibrometer_data" / "topology_0" / "spring-mass-2D-3by3_amp=1_2026-02-04.csv"
     
-    RAW_H5 = DATA_DIR / "experiment_data" / "raw_tracking_backup.h5"
-    FINAL_H5 = DATA_DIR / "experiment_data" / "calibrated_spring_mass.h5"
+    RAW_H5 = DATA_DIR / "experiment_data" / "raw_tracking_data.h5"
+    FINAL_H5 = DATA_DIR / "experiment_data" / "calibrated_tracking_data.h5"
     PLOT_SVG = DATA_DIR / "experiment_data" / "time_alignment_displacement.svg"
 
     LOWER_RED1, UPPER_RED1 = np.array([0, 120, 70]), np.array([10, 255, 255])
