@@ -12,8 +12,8 @@ from pathlib import Path
 current_script_dir = Path(__file__).parent.resolve()
 DATA_DIR = current_script_dir.parent.parent / "data"
 input_h5_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_tracking_data.h5')
-output_h5_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_samples_clean.h5')
-output_plot_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_samples_clean_plot.svg')
+output_h5_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_samples_sliced.h5')
+output_plot_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_samples_sliced_plot.svg')
 
 # Settings
 duration = 30          # seconds per slice
