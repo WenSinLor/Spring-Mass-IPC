@@ -1,9 +1,12 @@
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
-import os
-
+import sys
 from pathlib import Path
+
+# Ensure the package root is in the path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 
 
 # ==========================================
@@ -11,9 +14,9 @@ from pathlib import Path
 # ==========================================
 current_script_dir = Path(__file__).parent.resolve()
 DATA_DIR = current_script_dir.parent.parent / "data"
-input_h5_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_tracking_data.h5')
-output_h5_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_samples_sliced.h5')
-output_plot_path = os.path.join(DATA_DIR, 'experiment_data', 'calibrated_samples_sliced_plot.svg')
+input_h5_path = DATA_DIR / 'experiment_data' / 'calibrated_tracking_data.h5'
+output_h5_path = DATA_DIR / 'experiment_data' / 'calibrated_samples_sliced.h5'
+output_plot_path = DATA_DIR / 'experiment_data' / 'calibrated_samples_sliced_plot.svg'
 
 # Settings
 duration = 30          # seconds per slice
@@ -22,7 +25,7 @@ num_samples = 5        # Number of samples to find
 # ==========================================
 # 2. Load & Preprocess Data
 # ==========================================
-if not os.path.exists(input_h5_path):
+if not input_h5_path.exists():
     raise FileNotFoundError(f"File not found: {input_h5_path}")
 
 print(f"Loading data from {input_h5_path}...")

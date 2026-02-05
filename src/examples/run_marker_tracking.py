@@ -1,15 +1,19 @@
 import cv2
 import numpy as np
 from pathlib import Path
-from image_processing.marker_tracker import MarkerTracker
-from image_processing.video_loader import VideoLoader
+import sys
+
+# Ensure the package root is in the path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from processing.tracking import MarkerTracker, VideoLoader
 
 def main():
     # 1. Setup Path
     current_script_dir = Path(__file__).parent.resolve()
-    data_dir = current_script_dir.parent.parent / "data"
-    video_path = data_dir / "camera_data" / "C0989-008.MP4"
-    output_file = data_dir / "experiment_data" / "spring_mass_data.npz"
+    DATA_DIR = current_script_dir.parent.parent / "data"
+    VIDEO_FILE = DATA_DIR / "camera_data" / "topology_0" / "C0989.MP4"
+    OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_0" / "spring_mass_data.npz"
 
     # 2. Setup Tracker (Using your calibrated values)
     lower_red1 = np.array([0, 120, 70])
@@ -31,9 +35,9 @@ def main():
     valid_frames_count = 0
     expected_markers = 9 
 
-    print(f"Processing: {video_path}")
+    print(f"Processing: {VIDEO_FILE}")
 
-    with VideoLoader(str(video_path)) as loader:
+    with VideoLoader(str(VIDEO_FILE)) as loader:
         total_frames = int(loader.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         print(f"Video Length: {total_frames} frames")
         
@@ -107,8 +111,8 @@ def main():
     
     
     # We save it with the key 'trajectories'
-    np.savez_compressed(output_file, trajectories=final_array)
-    print(f"Saved compressed data to {output_file}")
+    np.savez_compressed(OUTPUT_FILE, trajectories=final_array)
+    print(f"Saved compressed data to {OUTPUT_FILE}")
 
 if __name__ == "__main__":
     main()

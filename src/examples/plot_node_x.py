@@ -6,10 +6,14 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from scipy import signal
+import sys
+
+# Ensure the package root is in the path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Import your framework modules
-from data_processing.trajectory_analyzer import TrajectoryAnalyzer
-from data_processing.sensor_loader import SensorLoader
+from analysis.trajectory import TrajectoryAnalyzer
+from data_io.loader import SensorLoader
 
 def get_video_start_timestamp(xml_path):
     """Parses Sony XML for CreationDate -> Unix Timestamp."""
@@ -68,7 +72,7 @@ def main():
     data_dir = current_script_dir.parent.parent / "data"
     
     video_path = data_dir / "experiment_data" / "spring_mass_data.npz"
-    sensor_path = data_dir / "vibrometer_data" / "symmetric_spring_setup" / "spring-mass-2D-3by3_amp=1_2026-02-04.csv"
+    sensor_path = data_dir / "vibrometer_data" / "topology_0" / "spring-mass-2D-3by3_amp=1_2026-02-04.csv"
     xml_path = data_dir / "camera_data" / "C0989M01.XML"
 
     # --- 2. PREPARE VIDEO (Target to be synced) ---
