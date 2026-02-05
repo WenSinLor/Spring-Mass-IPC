@@ -21,6 +21,8 @@ def main():
     DATA_DIR = current_script_dir.parent.parent / "data"
     CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_0"
     SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_0"
+    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_0"
+
 
     # Get and sort camera and sensor files
     camera_files = sorted([f for f in os.listdir(CAMERA_DATA_DIR) if f.endswith('.MP4')])
@@ -43,9 +45,9 @@ def main():
         SENSOR_FILE = SENSOR_DATA_DIR / sensor_file_name
 
         output_base_name = f"{VIDEO_FILE.stem}_{SENSOR_FILE.stem}"
-        RAW_H5 = DATA_DIR / "experiment_data" / f"{output_base_name}_raw_tracking_data.h5"
-        FINAL_H5 = DATA_DIR / "experiment_data" / f"{output_base_name}_calibrated_tracking_data.h5"
-        PLOT_SVG = DATA_DIR / "experiment_data" / f"{output_base_name}_time_alignment_displacement.svg"
+        RAW_H5 = EXPERIMENT_DATA_DIR / f"{output_base_name}_raw_tracking_data.h5"
+        FINAL_H5 = EXPERIMENT_DATA_DIR / f"{output_base_name}_calibrated_tracking_data.h5"
+        PLOT_SVG = EXPERIMENT_DATA_DIR / f"{output_base_name}_time_alignment_displacement.svg"
 
         LOWER_RED1, UPPER_RED1 = np.array([0, 120, 70]), np.array([10, 255, 255])
         LOWER_RED2, UPPER_RED2 = np.array([170, 120, 70]), np.array([180, 255, 255])
@@ -55,7 +57,7 @@ def main():
         # ==========================================
         tracker = MarkerTracker(LOWER_RED1, UPPER_RED1, LOWER_RED2, UPPER_RED2, min_area=10000, max_area=20000)
         video_proc = VideoProcessor(VIDEO_FILE, XML_FILE, tracker)
-        data_writer = DataWriter(output_dir=DATA_DIR / "experiment_data")
+        data_writer = DataWriter(output_dir=EXPERIMENT_DATA_DIR)
 
         # Run with 4-window visualization
         raw_trajectories, frame_indices = video_proc.process_video(visualize=False)

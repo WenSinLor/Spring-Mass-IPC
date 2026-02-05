@@ -34,7 +34,7 @@ def main():
     # ==========================================
     tracker = MarkerTracker(LOWER_RED1, UPPER_RED1, LOWER_RED2, UPPER_RED2, min_area=10000, max_area=20000)
     video_proc = VideoProcessor(VIDEO_FILE, XML_FILE, tracker)
-    data_writer = DataWriter(output_dir=DATA_DIR / "experiment_data")
+    data_writer = DataWriter(output_dir=DATA_DIR / "experiment_data" / "topology_0")
 
     # Run with 4-window visualization
     raw_trajectories, frame_indices = video_proc.process_video(visualize=False)

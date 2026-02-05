@@ -52,8 +52,8 @@ class SensorLoader:
         epochs = pd.to_numeric(self.df['Epoch time (ms)'])
         epochs = epochs.values
         
-        # Convert to relative seconds (starting at 0)
-        time_rel = (epochs - epochs[0]) / 1000.0
+        # Convert to absolute seconds
+        time_abs = epochs / 1000.0
         
         # 2. Extract Data (Assuming last column is the measurement)
         # We look for 'Distance1' or similar
@@ -67,4 +67,4 @@ class SensorLoader:
             
         data = pd.to_numeric(self.df[target_col]).values
             
-        return time_rel, data
+        return time_abs, data
