@@ -12,8 +12,8 @@ def main():
     # 1. Setup Path
     current_script_dir = Path(__file__).parent.resolve()
     DATA_DIR = current_script_dir.parent.parent / "data"
-    VIDEO_FILE = DATA_DIR / "camera_data" / "topology_0" / "C0989.MP4"
-    OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_0" / "spring_mass_data.npz"
+    VIDEO_FILE = DATA_DIR / "camera_data" / "topology_1" / "C1006-011.MP4"
+    OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_1" / "spring_mass_data.npz"
 
     # 2. Setup Tracker (Using your calibrated values)
     lower_red1 = np.array([0, 120, 70])

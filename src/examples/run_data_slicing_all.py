@@ -10,15 +10,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def process_file(input_h5_path):
     """
-    Processes a single calibrated H5 file to slice it into samples.
+    Processes a single calibrated H5 file (inside an amp=X folder).
+    - Generates a summary plot of the slicing process.
+    - Saves individual displacement slices into the sample_X folders.
     """
     # ==========================================
-    # 1. Configuration
+    # 1. Configuration & Paths
     # ==========================================
-    DATA_DIR = input_h5_path.parent
-    output_base_name = input_h5_path.name.replace('_calibrated_tracking_data.h5', '')
-    output_h5_path = DATA_DIR / f'{output_base_name}_calibrated_samples_sliced.h5'
-    output_plot_path = DATA_DIR / f'{output_base_name}_calibrated_samples_sliced_plot.svg'
+    # Input is: .../topology_0/amp=X/calibrated_tracking_data.h5
+    amp_folder = input_h5_path.parent
+    
+    print(f"Processing: {amp_folder.name}/{input_h5_path.name}")
+
+    # Output Plot (Summary goes in the Amplitude folder)
+    output_plot_path = amp_folder / 'slicing_summary_plot.svg'
 
     # Settings
     duration = 30          # seconds per slice
@@ -31,28 +36,20 @@ def process_file(input_h5_path):
         print(f"File not found: {input_h5_path}")
         return
 
-    print(f"Loading data from {input_h5_path}...")
-
     with h5py.File(input_h5_path, 'r') as f:
-        # 1. Get FPS (Crucial for correct slicing length)
-        fps = f.attrs.get('fps', 29.97) # Default to 29.97 if missing
-        print(f"Detected FPS: {fps:.2f}")
-
-        # 2. Load Raw Trajectories [Frames, Markers, Coordinates]
-        # Shape is likely (N, 9, 3)
+        # 1. Get FPS
+        fps = f.attrs.get('fps', 29.97)
+        
+        # 2. Load Raw Trajectories
         raw_trajectories = f['trajectories'][:]
 
-        # 3. Reconstruct the Displacement Signal (Same logic as your calibration script)
-        # Node 0 (Index 0), X-Axis (Index 0)
-        # Logic: vid_signal_x = -(vid_signal_x - vid_signal_x[0])
+        # 3. Reconstruct Displacement Signal
+        # Node 0, X-Axis
         raw_x = raw_trajectories[:, 0, 0]
         displacement_data = -(raw_x - raw_x[0])
 
-        print(f"Reconstructed Displacement Signal: {len(displacement_data)} points")
-
-    # Calculate exact points needed per 30s slice based on REAL fps
+    # Calculate points per slice
     points_per_sample = int(fps * duration)
-    print(f"Points per {duration}s sample: {points_per_sample}")
 
     # ==========================================
     # 3. Systematic Trigger & Slice
@@ -60,61 +57,61 @@ def process_file(input_h5_path):
     sliced_data_list = []
     current_search_idx = 0
 
-    # Threshold: Dynamic calculation (10% of max peak) to ensure we catch the start
+    # Auto-threshold
     trigger_threshold = np.max(np.abs(displacement_data)) * 0.1
-    print(f"Auto-calculated trigger threshold: {trigger_threshold:.2f} pixels")
+    print(f"   Threshold: {trigger_threshold:.2f} pixels")
 
-    with h5py.File(output_h5_path, 'w') as hf_out:
-        # Save metadata
-        hf_out.attrs['fps'] = fps
-        hf_out.attrs['duration'] = duration
+    for i in range(num_samples):
+        remaining_data = np.abs(displacement_data[current_search_idx:])
+        
+        if len(remaining_data) == 0:
+            print(f"   [Stop] No more data for sample {i}.")
+            break
 
-        for i in range(num_samples):
-            remaining_data = np.abs(displacement_data[current_search_idx:])
+        # Find trigger
+        potential_triggers = np.where(remaining_data > trigger_threshold)[0]
+        
+        if len(potential_triggers) == 0:
+            print(f"   [Stop] Signal below threshold for sample {i}.")
+            break
             
-            if len(remaining_data) == 0:
-                print(f"Warning: No more data to search for burst #{i+1}.")
-                break
+        trigger_rel = potential_triggers[0]
+        start_idx = max(0, current_search_idx + trigger_rel - int(0.5 * fps))
+        end_idx = start_idx + points_per_sample
 
-            # Find start of burst
-            trigger_rel = np.argmax(remaining_data > trigger_threshold)
+        if end_idx > len(displacement_data):
+            print(f"   [Stop] Not enough data for sample {i}.")
+            break
 
-            # Safety: Check if we actually found something
-            if remaining_data[trigger_rel] <= trigger_threshold:
-                print(f"Warning: Could not find burst #{i+1} (signal stayed below threshold).")
-                break
+        # Slice
+        segment = displacement_data[start_idx : end_idx]
+        sliced_data_list.append(segment)
 
-            start_idx = current_search_idx + trigger_rel
-            # Back up slightly (0.5s) to catch the rising edge
-            start_idx = max(0, start_idx - int(0.5 * fps))
+        # --- SAVE TO HIERARCHY ---
+        # Structure: amp=X / sample_i / displacement_slice.h5
+        sample_dir = amp_folder / f"sample_{i}"
+        sample_dir.mkdir(parents=True, exist_ok=True)
+        
+        slice_h5_path = sample_dir / 'displacement_slice.h5'
+        
+        try:
+            with h5py.File(slice_h5_path, 'w') as hf_out:
+                hf_out.create_dataset('displacement', data=segment)
+                hf_out.attrs['fps'] = fps
+                hf_out.attrs['duration'] = duration
+                hf_out.attrs['start_frame'] = start_idx
+            print(f"   -> Saved: sample_{i}/displacement_slice.h5")
+        except Exception as e:
+            print(f"   [Error] Could not save H5: {e}")
 
-            end_idx = start_idx + points_per_sample
-
-            # Check bounds
-            if end_idx > len(displacement_data):
-                print(f"Error: Not enough data left for Burst #{i+1}.")
-                break
-
-            # Slice
-            segment = displacement_data[start_idx : end_idx]
-            sliced_data_list.append(segment)
-
-            # Save
-            hf_out.create_dataset(f'sample_{i}', data=segment)
-            print(f"  -> Sample {i}: Indices {start_idx}-{end_idx} ({len(segment)} pts)")
-
-            # Move cursor forward (add buffer)
-            current_search_idx = end_idx + int(2.0 * fps) # 2 sec buffer to skip any tail noise
-
-    print(f"Saved {len(sliced_data_list)} samples to {output_h5_path}")
+        # Advance cursor
+        current_search_idx = end_idx + int(2.0 * fps)
 
     # ==========================================
-    # 4. Plotting (Displacement vs Relative Time)
+    # 4. Plotting (Summary)
     # ==========================================
     if sliced_data_list:
         count = len(sliced_data_list)
-
-        # Create RELATIVE time vector (0 to 30s)
         t_relative = np.linspace(0, duration, points_per_sample)
 
         fig, axes = plt.subplots(count, 1, figsize=(10, 2.5 * count), constrained_layout=True)
@@ -122,21 +119,15 @@ def process_file(input_h5_path):
 
         for i, data in enumerate(sliced_data_list):
             if len(data) != len(t_relative):
-                print(f"Warning: data length ({len(data)}) and time length ({len(t_relative)}) mismatch for sample {i}. Skipping plot.")
                 continue
 
             ax = axes[i]
-
-            # Plot
             ax.plot(t_relative, data, color='#1f77b4', linewidth=1.5)
-
-            # Styling
             ax.set_title(f'Sample {i}', loc='left', fontsize=11, fontweight='bold')
-            ax.set_ylabel('Displacement (pixels)', fontsize=9)
+            ax.set_ylabel('Disp. (px)', fontsize=9)
             ax.set_xlim(0, duration)
             ax.grid(True, linestyle=':', alpha=0.6)
 
-            # X-Axis Labels (Only on bottom plot)
             if i == count - 1:
                 ax.set_xlabel('Time (s)', fontsize=11)
             else:
@@ -144,27 +135,35 @@ def process_file(input_h5_path):
 
         plt.savefig(output_plot_path, format='svg')
         plt.close(fig)
-        print(f"Plot saved to {output_plot_path}")
+        print(f"   -> Saved Plot: {output_plot_path.name}")
     print("-" * 40)
 
 
 def main():
     """
-    Finds all calibrated H5 files and processes them.
+    Finds all calibrated H5 files in the hierarchy and processes them.
     """
-    current_script_dir = Path(__file__).parent.resolve()
-    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_0"
+    print("Starting script: Validate Slices (Plots & Displacement Check).")
     
-    files_to_process = [f for f in os.listdir(DATA_DIR) if f.endswith('_calibrated_tracking_data.h5')]
+    current_script_dir = Path(__file__).parent.resolve()
+    # Path to Topology Root
+    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_1"
+    
+    if not DATA_DIR.exists():
+        print(f"[Error] Directory not found: {DATA_DIR}")
+        return
+
+    # Use rglob to find files inside amp=X folders
+    files_to_process = sorted(list(DATA_DIR.rglob("calibrated_tracking_data.h5")))
     
     if not files_to_process:
-        print("No '*_calibrated_tracking_data.h5' files found to process.")
+        print("No 'calibrated_tracking_data.h5' files found.")
         return
         
     print(f"Found {len(files_to_process)} files to process.\n")
     
-    for file_name in files_to_process:
-        process_file(DATA_DIR / file_name)
+    for input_path in files_to_process:
+        process_file(input_path)
         
     print("\nAll files processed.")
 
