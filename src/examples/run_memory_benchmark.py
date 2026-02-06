@@ -49,9 +49,9 @@ def main():
     # 3. Define Benchmark and its arguments
     benchmark = MemoryBenchmark(group_name="memory_benchmark")
     benchmark_args = {
-        "tau_s": 15,
+        "tau_s": 150,
         "n_s": 2,
-        "k_delay": 10,
+        "k_delay": 1,
         "ridge": 1e-6
     }
 
@@ -137,7 +137,8 @@ def main():
     # 7. Visualize the capacities
     print("\n[Visualizing Benchmark Results]")
     if capacities is not None and basis_names is not None:
-        threshold = 1e-9
+        # Filter out near-zero capacities to remove noise
+        threshold = 0.00
         filtered_indices = [i for i, c in enumerate(capacities) if c > threshold]
         
         if not filtered_indices:
@@ -147,21 +148,42 @@ def main():
         filtered_scores = capacities[filtered_indices]
         filtered_names = [basis_names[i] for i in filtered_indices]
 
-        # Sort for better visualization
-        vis_sorted_indices = np.argsort(filtered_scores)[::-1]
-        vis_sorted_scores = filtered_scores[vis_sorted_indices]
-        vis_sorted_names = [filtered_names[i] for i in vis_sorted_indices]
+        # Sort descending
+        sort_idx = np.argsort(filtered_scores)[::-1]
+        sorted_scores = filtered_scores[sort_idx]
+        sorted_names = [filtered_names[i] for i in sort_idx]
 
-        plt.figure(figsize=(12, 8))
-        plt.bar(range(len(vis_sorted_scores)), vis_sorted_scores, tick_label=vis_sorted_names)
-        plt.xticks(rotation=90)
-        plt.ylabel("Capacity (R^2 Score)")
-        plt.title("Information Processing Capacity - Individual Tasks")
-        plt.ylim(0, 1)
+        # --- FIX: Limit to Top N and Dynamic Sizing ---
+        top_n = 200  # Only plot the top 50 tasks to prevent overlap
+        
+        if len(sorted_scores) > top_n:
+            print(f"  >> Truncating plot to top {top_n} tasks (out of {len(sorted_scores)} valid tasks).")
+            sorted_scores = sorted_scores[:top_n]
+            sorted_names = sorted_names[:top_n]
+
+        # Calculate width: ensure at least 0.25 inches per bar so text fits
+        dynamic_width = max(10, len(sorted_scores) * 0.3)
+        
+        plt.figure(figsize=(dynamic_width, 8)) # Dynamic width
+        plt.bar(range(len(sorted_scores)), sorted_scores, align='center', width=0.8)
+        
+        # Format Ticks
+        plt.xticks(
+            range(len(sorted_scores)), 
+            sorted_names, 
+            rotation=90, 
+            fontsize=9,      # Smaller font
+            ha='center'      # Center alignment for vertical text
+        )
+        
+        plt.ylabel("Capacity ($R^2$ Score)")
+        plt.title(f"Information Processing Capacity (Top {len(sorted_scores)} Tasks)")
+        plt.ylim(0, 1.05)
+        plt.xlim(-1, len(sorted_scores)) # Tighten x-axis
         plt.tight_layout()
 
         plot_dir = experiment_dir / "plots"
-        plot_dir.mkdir(exist_ok=True)
+        plot_dir.mkdir(parents=True, exist_ok=True)
         plot_path = plot_dir / "information_processing_capacity.svg"
         plt.savefig(plot_path)
         plt.close()

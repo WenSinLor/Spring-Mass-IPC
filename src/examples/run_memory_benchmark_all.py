@@ -46,9 +46,9 @@ def process_single_experiment(h5_path):
         benchmark = MemoryBenchmark(group_name="memory_benchmark")
 
         benchmark_args = {
-            "tau_s": 15,
+            "tau_s": 150,
             "n_s": 2,
-            "k_delay": 10,
+            "k_delay": 1,
             "ridge": 1e-6
         }
 
@@ -90,7 +90,7 @@ def process_single_experiment(h5_path):
             basis_names = [name.decode('utf-8') for name in basis_names_bytes]
 
             if capacities is not None and basis_names:
-                threshold = 1e-9
+                threshold = 0.00
                 filtered_indices = [i for i, c in enumerate(capacities) if c > threshold]
 
                 if not filtered_indices:
@@ -105,12 +105,33 @@ def process_single_experiment(h5_path):
                 vis_sorted_scores = filtered_scores[vis_sorted_indices]
                 vis_sorted_names = [filtered_names[i] for i in vis_sorted_indices]
 
-                plt.figure(figsize=(12, 8))
-                plt.bar(range(len(vis_sorted_scores)), vis_sorted_scores, tick_label=vis_sorted_names)
-                plt.xticks(rotation=90)
-                plt.ylabel("Capacity (R^2 Score)")
-                plt.title(f"Information Processing Capacity - {topo_name}/{amp_name}/{sample_name}")
-                plt.ylim(0, 1)
+                # Limit to Top N and apply dynamic sizing to prevent plot crowding
+                top_n = 200  # Only plot the top N tasks
+                
+                if len(vis_sorted_scores) > top_n:
+                    print(f"   [Info] Truncating plot to top {top_n} tasks (out of {len(vis_sorted_scores)}).")
+                    vis_sorted_scores = vis_sorted_scores[:top_n]
+                    vis_sorted_names = vis_sorted_names[:top_n]
+
+                # Calculate width: ensure at least 0.3 inches per bar so text fits
+                dynamic_width = max(10, len(vis_sorted_scores) * 0.3)
+                
+                plt.figure(figsize=(dynamic_width, 8))
+                plt.bar(range(len(vis_sorted_scores)), vis_sorted_scores, align='center', width=0.8)
+                
+                # Format Ticks for better readability
+                plt.xticks(
+                    range(len(vis_sorted_scores)), 
+                    vis_sorted_names, 
+                    rotation=90, 
+                    fontsize=9,
+                    ha='center'
+                )
+                
+                plt.ylabel("Capacity ($R^2$ Score)")
+                plt.title(f"Information Processing Capacity - {topo_name}/{amp_name}/{sample_name} (Top {len(vis_sorted_scores)})")
+                plt.ylim(0, 1.05)
+                plt.xlim(-1, len(vis_sorted_scores))
                 plt.tight_layout()
 
                 plot_dir = experiment_dir / "plots"

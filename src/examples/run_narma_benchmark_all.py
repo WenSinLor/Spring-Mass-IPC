@@ -83,7 +83,7 @@ def process_single_experiment(h5_path):
         visualizer = TimeSeriesComparison()
         if score.readout_path and visualizer:
             plot_path = visualizer.plot(score.readout_path, start_frame=0, end_frame=500).save()
-            # print(f"   -> Plot saved to: {plot_path.name}")
+            print(f"   -> Plot saved to: {plot_path.name}")
     except Exception as e:
         print(f"   [Warning] Visualization failed: {e}")
 
