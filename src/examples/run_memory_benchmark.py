@@ -25,7 +25,7 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_1"
+    TOPOLOGY = "topology_0"
     AMPLITUDE = "amp=1"
     SAMPLE = "sample_0"
     
@@ -49,9 +49,9 @@ def main():
     # 3. Define Benchmark and its arguments
     benchmark = MemoryBenchmark(group_name="memory_benchmark")
     benchmark_args = {
-        "tau_s": 150,
+        "tau_s": 5,
         "n_s": 2,
-        "k_delay": 1,
+        "k_delay": 30,
         "ridge": 1e-6
     }
 
@@ -100,6 +100,7 @@ def main():
     for i, (name, cap) in enumerate(zip(sorted_names, sorted_capacities)):
         if cap >= 0.00: # Only show tasks with non-trivial capacity
             print(f"  Index {i}: Capacity = {cap:.4f}, Basis = '{name}'")
+    print(f"Mean Capacity: {np.mean(sorted_capacities):.4f}")
 
     try:
         user_input = input("\nEnter the index of the readout to save (or press Enter to skip): ")
