@@ -100,7 +100,7 @@ def main():
     for i, (name, cap) in enumerate(zip(sorted_names, sorted_capacities)):
         if cap >= 0.00: # Only show tasks with non-trivial capacity
             print(f"  Index {i}: Capacity = {cap:.4f}, Basis = '{name}'")
-    print(f"Mean Capacity: {np.mean(sorted_capacities):.4f}")
+    print(f"Mean Capacity: {np.nanmean(sorted_capacities):.4f}")
 
     try:
         user_input = input("\nEnter the index of the readout to save (or press Enter to skip): ")

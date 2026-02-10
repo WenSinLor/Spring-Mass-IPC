@@ -103,7 +103,7 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_1"
+    TOPOLOGY = "topology_0"
     AMPLITUDE = "amp=1"
     SAMPLE = "sample_0"
     
