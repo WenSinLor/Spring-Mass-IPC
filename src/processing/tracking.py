@@ -137,7 +137,6 @@ class VideoProcessor:
         cap = cv2.VideoCapture(str(self.video_path))
         if not cap.isOpened(): raise IOError(f"Cannot open video: {self.video_path}")
         
-        self.fps = cap.get(cv2.CAP_PROP_FPS) or 29.97
         raw_trajectories, frame_indices = [], []
         frame_count = 0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))

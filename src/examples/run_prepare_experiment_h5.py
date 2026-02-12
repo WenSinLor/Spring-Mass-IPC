@@ -122,35 +122,28 @@ def prepare_experiment_slices(input_file: Path):
         p1 = pos_slice[:, bar_indices[:, 1], :]
         lengths_slice = np.sqrt(np.sum((p1 - p0)**2, axis=2))
 
-        # C. Slice Sensor Data (Nearest Neighbor Lookup)
-        # We find the sensor indices that correspond to the *Video Timestamps*
-        # This ensures actuation and position arrays are exactly the same length.
-        act_slice = None
-        if t_sensor_full is not None:
-            # np.searchsorted finds the index in t_sensor where time_slice values would fit
-            # This effectively finds the nearest sensor timestamp for each video frame
-            sensor_indices = np.searchsorted(t_sensor_full, time_slice)
-            
-            # Clip to ensure we don't go out of bounds (though unlikely if aligned correctly)
-            sensor_indices = np.clip(sensor_indices, 0, len(t_sensor_full) - 1)
-            
-            act_slice = y_sensor_full[sensor_indices]
-            
-            # Reshape for H5 (N, 1)
-            if act_slice.ndim == 1:
-                act_slice = act_slice.reshape(-1, 1)
+        # C. Slice Actuation from Video Data
+        # Using the displacement of Node 0 as the actuation signal.
+        act_slice = displacement_data[start_idx:end_idx]
 
-            # --- PLOTTING FOR VERIFICATION ---
-            # plt.figure(figsize=(8, 3))
-            # plt.plot(time_slice_relative, act_slice, color='darkorange', label='Sensor (m)')
-            # plt.title(f"Sample {i} Actuation ({amp_folder_name})")
-            # plt.xlabel("Time (s)")
-            # plt.ylabel("Displacement (m)")
-            # plt.grid(True, alpha=0.5)
-            # plt.legend()
-            # plt.tight_layout()
-            # plt.show() # Pop-up window
-            # plt.close()
+        # Reshape for H5 (N, 1)
+        if act_slice.ndim == 1:
+            act_slice = act_slice.reshape(-1, 1)
+
+        # NOTE: This actuation signal is in PIXELS. The original sensor data was in METERS.
+        # This may need to be adjusted if physical units are required.
+
+        # --- PLOTTING FOR VERIFICATION ---
+        # plt.figure(figsize=(8, 3))
+        # plt.plot(time_slice_relative, act_slice, color='darkorange', label='Video Disp. (px)')
+        # plt.title(f"Sample {i} Actuation ({amp_folder_name})")
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Displacement (px)")
+        # plt.grid(True, alpha=0.5)
+        # plt.legend()
+        # plt.tight_layout()
+        # plt.show() # Pop-up window
+        # plt.close()
 
         # D. Save to Experiment H5
         sample_dir = amp_folder_path / f"sample_{i}"
@@ -196,13 +189,13 @@ def main():
         return
     
     # Recursive Glob
-    input_files = sorted(list(EXPERIMENT_DATA_DIR.rglob("calibrated_tracking_data.h5")))
+    input_files = sorted(list(EXPERIMENT_DATA_DIR.rglob("tracking_data.h5")))
     
     if not input_files:
-        print(f"No 'calibrated_tracking_data.h5' files found.")
+        print(f"No 'tracking_data.h5' files found.")
         return
 
-    print(f"Found {len(input_files)} calibrated files. Processing...")
+    print(f"Found {len(input_files)} tracking_data.h5 files. Processing...")
     
     for f in input_files:
         prepare_experiment_slices(f)

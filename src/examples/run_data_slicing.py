@@ -78,8 +78,8 @@ def process_file(input_h5_path):
             break
             
         start_idx = current_search_idx + trigger_rel
-        # Back up slightly (0.5s) to catch the rising edge
-        start_idx = max(0, start_idx - int(0.5 * fps))
+        # Back up slightly (0.2s) to catch the rising edge
+        start_idx = max(0, start_idx - int(0.2 * fps))
         end_idx = start_idx + points_per_sample
         
         # Check bounds
@@ -148,17 +148,17 @@ def main():
     
     current_script_dir = Path(__file__).parent.resolve()
     # Path to the Topology root folder
-    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_0"
+    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_0" / "amp=1"
     
     if not DATA_DIR.exists():
         print(f"[Error] Directory not found: {DATA_DIR}")
         return
 
     # RECURSIVE SEARCH: Find files inside amp=X folders
-    files_to_process = sorted(list(DATA_DIR.rglob("calibrated_tracking_data.h5")))
+    files_to_process = sorted(list(DATA_DIR.rglob("tracking_data.h5")))
     
     if not files_to_process:
-        print("No 'calibrated_tracking_data.h5' files found.")
+        print("No 'tracking_data.h5' files found.")
         return
         
     print(f"Found {len(files_to_process)} files to process.\n")
