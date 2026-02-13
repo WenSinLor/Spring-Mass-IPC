@@ -49,9 +49,9 @@ def main():
     # 3. Define Benchmark and its arguments
     benchmark = MemoryBenchmark(group_name="memory_benchmark")
     benchmark_args = {
-        "tau_s": 5,
+        "tau_s": 50,
         "n_s": 2,
-        "k_delay": 30,
+        "k_delay": 3,
         "ridge": 1e-6
     }
 

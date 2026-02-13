@@ -9,7 +9,7 @@ class MarkerTracker:
     """
     Identifies red markers, cleans noise, and calculates centroids for all found markers.
     """
-    def __init__(self, lower_hsv1, upper_hsv1, lower_hsv2, upper_hsv2, min_area=50, max_area=50):
+    def __init__(self, lower_hsv1, upper_hsv1, lower_hsv2, upper_hsv2, min_area=10000, max_area=20000):
         self.min_area = min_area
         self.max_area = max_area 
         self.lower_hsv1 = lower_hsv1
@@ -154,12 +154,28 @@ class VideoProcessor:
                 clean_frame = frame.copy()
                 frame_with_dots = frame.copy()
                 mask, centroids = self.tracker.process_frame(clean_frame)
-                sorted_centroids = sorted(centroids, key=lambda p: (p[1] // 50, p[0]))
+                sorted_centroids = []
+                if len(centroids) == expected_markers:
+                    # 1. Sort all by Y (Top -> Bottom)
+                    y_sorted = sorted(centroids, key=lambda p: p[1])
+                    
+                    # 2. Slice into 3 rows of 3
+                    # 3. Sort each row by X (Left -> Right)
+                    row_1 = sorted(y_sorted[0:3], key=lambda p: p[0])
+                    row_2 = sorted(y_sorted[3:6], key=lambda p: p[0])
+                    row_3 = sorted(y_sorted[6:9], key=lambda p: p[0])
+                    
+                    # 4. Combine
+                    sorted_centroids = row_1 + row_2 + row_3
 
-                if len(sorted_centroids) == expected_markers:
+                    # Save Data
                     block = [[c[0], c[1], 0] for c in sorted_centroids]
                     raw_trajectories.append(block)
                     frame_indices.append(frame_count)
+                else:
+                    # Optional: Print warning if tracking is lost
+                    # print(f"Lost tracking on frame {frame_count}: Found {len(centroids)} markers")
+                    pass
                 
                 # --- VISUALIZATION ---
                 if visualize:

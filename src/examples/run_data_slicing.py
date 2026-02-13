@@ -59,7 +59,7 @@ def process_file(input_h5_path):
     current_search_idx = 0
 
     # Auto-calculate threshold
-    trigger_threshold = np.max(np.abs(displacement_data)) * 0.1
+    trigger_threshold = np.max(np.abs(displacement_data)) * 0.34
     print(f"   Threshold: {trigger_threshold:.2f} pixels")
 
     for i in range(num_samples):
@@ -148,7 +148,7 @@ def main():
     
     current_script_dir = Path(__file__).parent.resolve()
     # Path to the Topology root folder
-    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_0" / "amp=1"
+    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_1" / "amp=0.2"
     
     if not DATA_DIR.exists():
         print(f"[Error] Directory not found: {DATA_DIR}")

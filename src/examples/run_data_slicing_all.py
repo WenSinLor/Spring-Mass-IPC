@@ -76,7 +76,7 @@ def process_file(input_h5_path):
             break
             
         trigger_rel = potential_triggers[0]
-        start_idx = max(0, current_search_idx + trigger_rel - int(0.5 * fps))
+        start_idx = max(0, current_search_idx + trigger_rel - int(0.2 * fps))
         end_idx = start_idx + points_per_sample
 
         if end_idx > len(displacement_data):
@@ -154,10 +154,11 @@ def main():
         return
 
     # Use rglob to find files inside amp=X folders
-    files_to_process = sorted(list(DATA_DIR.rglob("calibrated_tracking_data.h5")))
+    all_files = sorted(list(DATA_DIR.rglob("tracking_data.h5")))
+    files_to_process = [f for f in all_files if "amp=" in str(f)]
     
     if not files_to_process:
-        print("No 'calibrated_tracking_data.h5' files found.")
+        print("No 'tracking_data.h5' files found in any amp=X directory.")
         return
         
     print(f"Found {len(files_to_process)} files to process.\n")

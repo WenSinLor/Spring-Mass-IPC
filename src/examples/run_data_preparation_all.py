@@ -30,11 +30,11 @@ def main():
     DATA_DIR = current_script_dir.parent.parent / "data"
     
     # Input Directories
-    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_0"
-    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_0"
+    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_1"
+    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_1"
     
     # Base Output Directory
-    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_0"
+    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_1"
 
     # --- 1. SCAN AND PAIR FILES ---
     # Get sorted lists
@@ -58,7 +58,6 @@ def main():
         # XML usually has same stem but ends in M01.XML.
         xml_name = f"{VIDEO_FILE.stem.split('-')[0]}M01.XML"
         XML_FILE = CAMERA_DATA_DIR / xml_name
-        SENSOR_FILE = SENSOR_DATA_DIR / sensor_file_name
 
         # --- DYNAMIC FOLDER CREATION ---
         # 1. Extract Amplitude Tag (e.g., "amp=1")
@@ -71,8 +70,7 @@ def main():
 
         # 3. Define Output File Names (Standardized)
         # We can use generic names now because they are in separate folders
-        raw_h5_name = "raw_tracking_data.h5"
-        final_h5_name = "calibrated_tracking_data.h5"
+        output_filename = "tracking_data.h5"
         
         # Red Color Ranges (HSV)
         LOWER_RED1, UPPER_RED1 = np.array([0, 120, 70]), np.array([10, 255, 255])
@@ -95,10 +93,6 @@ def main():
         fps = video_proc.fps
         video_time = xml_start_ts + (frame_indices / fps)
 
-        # Save Raw Backup
-        raw_meta = {'fps': fps, 'xml_start_time': xml_start_ts, 'type': 'raw', 'original_video': video_file_name}
-        data_writer.save_to_h5(raw_h5_name, raw_trajectories, video_time, raw_meta)
-
         # ==========================================
         # STAGE 2: FINAL SAVE
         # ==========================================
@@ -107,10 +101,9 @@ def main():
             'xml_start_time': xml_start_ts,
             'source_video': video_file_name,
             'source_sensor': sensor_file_name,
-            'amplitude_group': amp_tag,
-            'type': 'calibrated'
+            'amplitude_group': amp_tag
         }
-        data_writer.save_to_h5(final_h5_name, raw_trajectories, video_time, final_meta)
+        data_writer.save_to_h5(output_filename, raw_trajectories, video_time, final_meta)
         print("   -> Pair Complete.")
 
     print("\nAll pairs processed successfully.")

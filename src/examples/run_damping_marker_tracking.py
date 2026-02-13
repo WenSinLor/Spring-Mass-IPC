@@ -39,8 +39,8 @@ def main():
     DATA_DIR = current_script_dir.parent.parent / "data"
     
     # NOTE: Update this to your specific video file. 
-    VIDEO_FILE = DATA_DIR / "damping_camera_data" / "damping-test-sample-1.MP4"
-    OUTPUT_FILE = DATA_DIR / "experiment_data" / "damping_test" / "sample_1" / "damping_spring_mass_data.npz"
+    VIDEO_FILE = DATA_DIR / "damping_camera_data" / "damping-test-sample-0.MP4"
+    OUTPUT_FILE = DATA_DIR / "experiment_data" / "damping_test" / "sample_0" / "damping_spring_mass_data.npz"
 
     # --- CRITICAL FIX: CREATE DIRECTORY IF IT DOESN'T EXIST ---
     # This checks the parent folder of the output file and creates it if missing.

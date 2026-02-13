@@ -12,8 +12,8 @@ def main():
     # 1. Setup Path
     current_script_dir = Path(__file__).parent.resolve()
     DATA_DIR = current_script_dir.parent.parent / "data"
-    VIDEO_FILE = DATA_DIR / "camera_data" / "topology_0" / "C1050.MP4"
-    OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_0" / "spring_mass_data.npz"
+    VIDEO_FILE = DATA_DIR / "camera_data" / "topology_1" / "C1065.MP4"
+    OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_1" / "spring_mass_data.npz"
 
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -49,8 +49,39 @@ def main():
             mask, centroids = tracker.process_frame(clean_frame)
 
             # --- SORTING LOGIC ---
-            # Sort by Y (rows of 50px height), then by X
-            sorted_centroids = sorted(centroids, key=lambda p: (p[1] // 50, p[0]))
+            # We only sort effectively if we have the expected number of markers (9)
+            if len(centroids) == expected_markers:
+                
+                # 1. Sort all points by Y coordinate (Top -> Bottom)
+                y_sorted = sorted(centroids, key=lambda p: p[1])
+                
+                # 2. Slice into 3 rows of 3 points each
+                # Top row (first 3 points by Y), Middle row (next 3), Bottom row (last 3)
+                row_1 = y_sorted[0:3]
+                row_2 = y_sorted[3:6]
+                row_3 = y_sorted[6:9]
+                
+                # 3. Sort each row by X coordinate (Left -> Right)
+                row_1 = sorted(row_1, key=lambda p: p[0])
+                row_2 = sorted(row_2, key=lambda p: p[0])
+                row_3 = sorted(row_3, key=lambda p: p[0])
+                
+                # 4. Combine them back into a single list
+                sorted_centroids = row_1 + row_2 + row_3
+
+                # --- DATA COLLECTION ---
+                # Create a frame block of shape (9, 3)
+                frame_block = []
+                for (cx, cy) in sorted_centroids:
+                    frame_block.append([cx, cy, 0]) # x, y, z=0
+                
+                raw_trajectory_data.append(frame_block)
+                valid_frames_count += 1
+            
+            else:
+                # If we miss a marker, skip
+                sorted_centroids = [] # Empty for visualization handling
+                print(f"Frame {frame_idx}: Found {len(centroids)} markers. Skipping.")
 
             # --- DATA COLLECTION ---
             if len(sorted_centroids) == expected_markers:

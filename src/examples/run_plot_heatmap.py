@@ -103,9 +103,9 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_0"
+    TOPOLOGY = "topology_1"
     AMPLITUDE = "amp=1"
-    SAMPLE = "sample_0"
+    SAMPLE = "sample_4"
     
     data_root = src_dir.parent / "data" / "experiment_data"
     experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
@@ -162,10 +162,10 @@ def main():
             print("Benchmark did not produce any metrics. Exiting.")
             return
 
-        print("\n[Benchmark Results]")
-        print(f"  >> Total Capacity: {score.metrics.get('total_capacity', 0):.4f}")
-        print(f"  >> Linear Memory Capacity: {score.metrics.get('linear_memory_capacity', 0):.4f}")
-        print(f"  >> Nonlinear Memory Capacity: {score.metrics.get('nonlinear_memory_capacity', 0):.4f}")
+        # print("\n[Benchmark Results]")
+        # print(f"  >> Total Capacity: {score.metrics.get('total_capacity', 0):.4f}")
+        # print(f"  >> Linear Memory Capacity: {score.metrics.get('linear_memory_capacity', 0):.4f}")
+        # print(f"  >> Nonlinear Memory Capacity: {score.metrics.get('nonlinear_memory_capacity', 0):.4f}")
 
         capacities = score.metrics.get('capacities')
         basis_names_bytes = score.metrics.get('basis_names', [])
