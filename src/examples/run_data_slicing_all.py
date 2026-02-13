@@ -147,7 +147,7 @@ def main():
     
     current_script_dir = Path(__file__).parent.resolve()
     # Path to Topology Root
-    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_1"
+    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_5"
     
     if not DATA_DIR.exists():
         print(f"[Error] Directory not found: {DATA_DIR}")

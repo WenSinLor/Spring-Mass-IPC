@@ -25,16 +25,21 @@ def extract_amplitude(filename):
     return "unknown_amp"
 
 def main():
-    # --- CONFIGURATION ---
+    # --- GRID CONFIGURATION ---
+    GRID_ROWS = 4
+    GRID_COLS = 4
+    # --------------------------
+
+    # --- PATH CONFIGURATION ---
     current_script_dir = Path(__file__).parent.resolve()
     DATA_DIR = current_script_dir.parent.parent / "data"
     
     # Input Directories
-    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_1"
-    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_1"
+    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_5"
+    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_5"
     
     # Base Output Directory
-    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_1"
+    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_5"
 
     # --- 1. SCAN AND PAIR FILES ---
     # Get sorted lists
@@ -79,6 +84,7 @@ def main():
         # ==========================================
         # STAGE 1: VIDEO PROCESSING
         # ==========================================
+        print(f"   Expecting a {GRID_ROWS}x{GRID_COLS} grid.")
         tracker = MarkerTracker(LOWER_RED1, UPPER_RED1, LOWER_RED2, UPPER_RED2, min_area=10000, max_area=20000)
         video_proc = VideoProcessor(VIDEO_FILE, XML_FILE, tracker)
         
@@ -86,7 +92,11 @@ def main():
         data_writer = DataWriter(output_dir=output_folder)
 
         # Run Tracking
-        raw_trajectories, frame_indices = video_proc.process_video(visualize=False)
+        raw_trajectories, frame_indices = video_proc.process_video(
+            grid_rows=GRID_ROWS,
+            grid_cols=GRID_COLS,
+            visualize=False
+        )
 
         # Rough Timing
         xml_start_ts = video_proc.start_timestamp

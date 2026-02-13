@@ -74,9 +74,22 @@ def prepare_experiment_slices(input_file: Path):
         temp[:, :, :2] = full_trajectories
         full_trajectories = temp
 
+    # bar_indices = np.array([
+    #     [0, 1], [1, 2], [3, 4], [4, 5], [6, 7], [7, 8], # Horizontal
+    #     [0, 3], [3, 6], [1, 4], [4, 7], [2, 5], [5, 8]  # Vertical
+    # ])
+
     bar_indices = np.array([
-        [0, 1], [1, 2], [3, 4], [4, 5], [6, 7], [7, 8], # Horizontal
-        [0, 3], [3, 6], [1, 4], [4, 7], [2, 5], [5, 8]  # Vertical
+        # Horizontal
+        [0, 1], [1, 2], [2, 3],
+        [4, 5], [5, 6], [6, 7],
+        [8, 9], [9, 10], [10, 11],
+        [12, 13], [13, 14], [14, 15],
+        # Vertical
+        [0, 4], [4, 8], [8, 12],
+        [1, 5], [5, 9], [9, 13],
+        [2, 6], [6, 10], [10, 14],
+        [3, 7], [7, 11], [11, 15]
     ])
 
     # ==========================================
@@ -102,7 +115,7 @@ def prepare_experiment_slices(input_file: Path):
             break
             
         trigger_rel = potential_triggers[0]
-        start_idx = max(0, current_search_idx + trigger_rel - int(0.5 * fps))
+        start_idx = max(0, current_search_idx + trigger_rel - int(0.2 * fps))
         end_idx = start_idx + points_per_sample
 
         if end_idx > len(full_trajectories):
@@ -160,7 +173,8 @@ def prepare_experiment_slices(input_file: Path):
                 
                 if act_slice is not None:
                     act = ts.create_group('actuation_signals')
-                    for node in [0, 2, 6, 8]: 
+                    # for node in [0, 2, 6, 8]:
+                    for node in [0, 3, 12, 15]: 
                         act.create_dataset(str(node), data=act_slice)
 
                 for k, v in metadata.items(): f_out.attrs[k] = v
@@ -182,7 +196,7 @@ def main():
     print("Starting script: Slice and Organize Experiment Samples.")
     
     current_script_dir = Path(__file__).parent.resolve()
-    EXPERIMENT_DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_1"
+    EXPERIMENT_DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_5"
     
     if not EXPERIMENT_DATA_DIR.exists():
         print(f"[Error] Directory not found: {EXPERIMENT_DATA_DIR}")

@@ -14,7 +14,12 @@ from data_io.loader import SensorLoader
 
 
 def main():
-    # --- CONFIGURATION ---
+    # --- GRID CONFIGURATION ---
+    GRID_ROWS = 4
+    GRID_COLS = 4
+    # --------------------------
+
+    # --- PATH CONFIGURATION ---
     current_script_dir = Path(__file__).parent.resolve()
     DATA_DIR = current_script_dir.parent.parent / "data"
     VIDEO_FILE = DATA_DIR / "camera_data" / "topology_0" / "C1050.MP4"
@@ -25,18 +30,24 @@ def main():
     EXPERIMENT_FILE.parent.mkdir(parents=True, exist_ok=True)
     PLOT_SVG = DATA_DIR / "experiment_data" / "topology_0" / "time_alignment_displacement.svg"
 
+    # --- TRACKER CONFIGURATION ---
     LOWER_RED1, UPPER_RED1 = np.array([0, 120, 70]), np.array([10, 255, 255])
     LOWER_RED2, UPPER_RED2 = np.array([170, 120, 70]), np.array([180, 255, 255])
 
     # ==========================================
     # STAGE 1: VIDEO PROCESSING
     # ==========================================
+    print(f"Expecting a {GRID_ROWS}x{GRID_COLS} grid.")
     tracker = MarkerTracker(LOWER_RED1, UPPER_RED1, LOWER_RED2, UPPER_RED2, min_area=10000, max_area=20000)
     video_proc = VideoProcessor(VIDEO_FILE, XML_FILE, tracker)
     data_writer = DataWriter(output_dir=DATA_DIR / "experiment_data" / "topology_0")
 
     # Run with 4-window visualization
-    trajectories, frame_indices = video_proc.process_video(visualize=False)
+    trajectories, frame_indices = video_proc.process_video(
+        grid_rows=GRID_ROWS, 
+        grid_cols=GRID_COLS, 
+        visualize=False
+    )
 
     # Rough Timing
     xml_start_ts = video_proc.start_timestamp

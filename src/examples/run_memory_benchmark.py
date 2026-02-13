@@ -12,6 +12,7 @@ sys.path.insert(0, str(src_dir))
 from openprc.analysis.benchmarks.memory_benchmark import MemoryBenchmark
 from openprc.reservoir.io.state_loader import StateLoader
 from openprc.reservoir.features.node_features import NodePositions
+from openprc.reservoir.features.bar_features import BarExtensions
 from openprc.reservoir.training.trainer import Trainer
 from openprc.reservoir.readout.ridge import Ridge
 from openprc.analysis.visualization.time_series import TimeSeriesComparison
@@ -25,9 +26,9 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_0"
+    TOPOLOGY = "topology_5"
     AMPLITUDE = "amp=1"
-    SAMPLE = "sample_0"
+    SAMPLE = "sample_1"
     
     data_root = src_dir.parent / "data" / "experiment_data"
     experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
@@ -41,7 +42,7 @@ def main():
     
     # 2. Shared Setup
     loader = StateLoader(h5_path)
-    features = NodePositions()
+    features = BarExtensions()
     u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
     
     print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
@@ -49,7 +50,7 @@ def main():
     # 3. Define Benchmark and its arguments
     benchmark = MemoryBenchmark(group_name="memory_benchmark")
     benchmark_args = {
-        "tau_s": 50,
+        "tau_s": 10,
         "n_s": 2,
         "k_delay": 3,
         "ridge": 1e-6

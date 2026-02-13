@@ -22,7 +22,7 @@ class MarkerTracker:
         # A 5x5 square is a good starting point. Increase size for larger noise.
         self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
 
-    def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+    def process_frame(self, frame: np.ndarray, frame_idx: int) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
         # 1. HSV Thresholding with two ranges
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         mask1 = cv2.inRange(hsv, self.lower_hsv1, self.upper_hsv1)
@@ -33,18 +33,24 @@ class MarkerTracker:
         mask_clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel, iterations=1)
         
         # 3. Find centroids of all valid markers
-        centroids = self._find_marker_centroids(mask_clean)
+        centroids = self._find_marker_centroids(mask_clean, frame_idx)
         return mask_clean, centroids
 
-    def _find_marker_centroids(self, mask: np.ndarray) -> List[Tuple[int, int]]:
+    def _find_marker_centroids(self, mask: np.ndarray, frame_idx: int) -> List[Tuple[int, int]]:
         """
         Finds contours and filters them by Area AND Shape.
         """
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) 
         
+        if not contours:
+            return [] # No contours found, return empty list.
+
+        contour_areas = [cv2.contourArea(c) for c in contours]
+        # print(f"Frame {frame_idx}: {contour_areas}\n")
+
         found_centroids = []
-        for c in contours:
-            area = cv2.contourArea(c)
+        # Iterate over contours and their corresponding areas
+        for c, area in zip(contours, contour_areas):
             
             # Get bounding box to check shape
             x, y, w, h = cv2.boundingRect(c)
@@ -52,14 +58,11 @@ class MarkerTracker:
             
             # --- FILTERING LOGIC ---
             
-            # 1. Size Filter: Keep only objects within a reasonable size range
-            # Adjust these values based on your specific video resolution!
-            # The 'big noise' on the right will be > max_area
+            # 1. Size Filter
             if area < self.min_area or area > self.max_area:
                 continue
 
-            # 2. Shape Filter: Markers are squares, so aspect ratio should be close to 1.
-            # Allow for some perspective distortion (e.g., 0.5 to 2.0)
+            # 2. Shape Filter
             if aspect_ratio < 0.5 or aspect_ratio > 2.0:
                 continue
             
@@ -130,13 +133,15 @@ class VideoProcessor:
             print(f"Warning: XML Timestamp error ({e}). Defaulting to 0.0")
         return 0.0
 
-    def process_video(self, expected_markers=9, visualize=False):
+    def process_video(self, grid_rows: int, grid_cols: int, visualize: bool = False):
         print(f"Processing Video: {self.video_path.name}")
         self.start_timestamp = self.get_start_timestamp()
         
+        expected_markers = grid_rows * grid_cols
         cap = cv2.VideoCapture(str(self.video_path))
         if not cap.isOpened(): raise IOError(f"Cannot open video: {self.video_path}")
         
+        # self.fps = cap.get(cv2.CAP_PROP_FPS) or 29.97
         raw_trajectories, frame_indices = [], []
         frame_count = 0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -153,29 +158,28 @@ class VideoProcessor:
 
                 clean_frame = frame.copy()
                 frame_with_dots = frame.copy()
-                mask, centroids = self.tracker.process_frame(clean_frame)
+                mask, centroids = self.tracker.process_frame(clean_frame, frame_count)
                 sorted_centroids = []
+
                 if len(centroids) == expected_markers:
                     # 1. Sort all by Y (Top -> Bottom)
                     y_sorted = sorted(centroids, key=lambda p: p[1])
                     
-                    # 2. Slice into 3 rows of 3
-                    # 3. Sort each row by X (Left -> Right)
-                    row_1 = sorted(y_sorted[0:3], key=lambda p: p[0])
-                    row_2 = sorted(y_sorted[3:6], key=lambda p: p[0])
-                    row_3 = sorted(y_sorted[6:9], key=lambda p: p[0])
-                    
-                    # 4. Combine
-                    sorted_centroids = row_1 + row_2 + row_3
+                    # 2. Dynamically slice and sort rows
+                    for i in range(grid_rows):
+                        start_idx = i * grid_cols
+                        end_idx = start_idx + grid_cols
+                        row = y_sorted[start_idx:end_idx]
+                        row_sorted = sorted(row, key=lambda p: p[0])
+                        sorted_centroids.extend(row_sorted)
 
                     # Save Data
                     block = [[c[0], c[1], 0] for c in sorted_centroids]
                     raw_trajectories.append(block)
                     frame_indices.append(frame_count)
                 else:
-                    # Optional: Print warning if tracking is lost
-                    # print(f"Lost tracking on frame {frame_count}: Found {len(centroids)} markers")
-                    pass
+                    if len(centroids) > 0:
+                        print(f"Frame {frame_count}: Found {len(centroids)} markers (expected {expected_markers}). Skipping.")
                 
                 # --- VISUALIZATION ---
                 if visualize:

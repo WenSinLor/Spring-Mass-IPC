@@ -15,6 +15,7 @@ sys.path.insert(0, str(src_dir))
 from openprc.analysis.benchmarks.memory_benchmark import MemoryBenchmark
 from openprc.reservoir.io.state_loader import StateLoader
 from openprc.reservoir.features.node_features import NodePositions
+from openprc.reservoir.features.bar_features import BarExtensions, BarLengths
 from openprc.reservoir.training.trainer import Trainer
 from openprc.reservoir.readout.ridge import Ridge
 from openprc.analysis.visualization.time_series import TimeSeriesComparison
@@ -76,7 +77,7 @@ def plot_heatmap(
 
         if save_name is None:
             # Default filename
-            save_name = f"heatmap_R2_eta_n{n}_A{amp}_k{k_delay}"
+            save_name = f"heatmap_R2_n{n}_A{amp}_k{k_delay}"
 
         if save_svg:
             svg_path = os.path.join(save_dir, f"{save_name}.svg")
@@ -103,82 +104,87 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_1"
-    AMPLITUDE = "amp=1"
-    SAMPLE = "sample_4"
-    
-    data_root = src_dir.parent / "data" / "experiment_data"
-    experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
-    h5_path = experiment_dir / "experiment.h5"
-
-    if not h5_path.exists():
-        print(f"[Error] Experiment file not found: {h5_path}")
-        return
-
-    print(f"-> Loading Experiment: {AMPLITUDE} / {SAMPLE}")
-    
-    # 2. Shared Setup
-    loader = StateLoader(h5_path)
-    features = NodePositions()
-    u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
-    
-    print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
-    
-    # 3. Define Benchmark and its arguments
-    n_list = list(range(1, 9))
-    tau_d_list = list(range(6))
-    heatmap = np.empty((len(n_list), len(tau_d_list)), dtype=float)
-
-    idx_pairs = list(product(range(len(n_list)), range(len(tau_d_list))))
-    for (i, j) in tqdm(idx_pairs, total=len(idx_pairs), leave=True):
-        n_s = n_list[i]
-        tau_s = tau_d_list[j]
-        benchmark = MemoryBenchmark(group_name="memory_benchmark")
-        benchmark_args = {
-            "tau_s": tau_s,
-            "n_s": n_s,
-            "k_delay": 30,
-            "ridge": 1e-6
-        }
-
-        trainer = Trainer(
-            loader=loader,
-            features=features,
-            readout=Ridge(benchmark_args.get("ridge")),
-            experiment_dir=experiment_dir,
-            washout=5.0,
-            train_duration=10.0,
-            test_duration=10.0,
-        )
+    NUM_SAMPLES = 5
+    for i in range(NUM_SAMPLES):
+        TOPOLOGY = "topology_5"
+        AMPLITUDE = "amp=1"
+        SAMPLE = f"sample_{i}"
         
-        # 4. First Run: Calculate all capacities
-        print(f"\n--- Running Initial Benchmark to Calculate All Capacities ---")
-        score = benchmark.run(trainer, u_input, **benchmark_args)
-        score.save()
-        print("--- Initial run complete. ---")
+        data_root = src_dir.parent / "data" / "experiment_data"
+        experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
+        h5_path = experiment_dir / "experiment.h5"
+        save_path = experiment_dir / "plots"
 
-        # 5. Print key metrics and prepare for interactive selection
-        if not score.metrics:
-            print("Benchmark did not produce any metrics. Exiting.")
+        if not h5_path.exists():
+            print(f"[Error] Experiment file not found: {h5_path}")
             return
 
-        # print("\n[Benchmark Results]")
-        # print(f"  >> Total Capacity: {score.metrics.get('total_capacity', 0):.4f}")
-        # print(f"  >> Linear Memory Capacity: {score.metrics.get('linear_memory_capacity', 0):.4f}")
-        # print(f"  >> Nonlinear Memory Capacity: {score.metrics.get('nonlinear_memory_capacity', 0):.4f}")
+        print(f"-> Loading Experiment: {AMPLITUDE} / {SAMPLE}")
+        
+        # 2. Shared Setup
+        loader = StateLoader(h5_path)
+        features = NodePositions()
+        u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
+        
+        print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
+        
+        # 3. Define Benchmark and its arguments
+        n_list = list(range(1, 9))
+        tau_d_list = list(range(10))
+        k_delay = 3
 
-        capacities = score.metrics.get('capacities')
-        basis_names_bytes = score.metrics.get('basis_names', [])
-        basis_names = [name.decode('utf-8') for name in basis_names_bytes]
+        heatmap = np.empty((len(n_list), len(tau_d_list)), dtype=float)
 
-        if capacities is None or not basis_names:
-            print("No capacities or basis names found in metrics. Exiting.")
-            return
+        idx_pairs = list(product(range(len(n_list)), range(len(tau_d_list))))
+        for (i, j) in tqdm(idx_pairs, total=len(idx_pairs), leave=True):
+            n_s = n_list[i]
+            tau_s = tau_d_list[j]
+            benchmark = MemoryBenchmark(group_name="memory_benchmark")
+            benchmark_args = {
+                "tau_s": tau_s,
+                "n_s": n_s,
+                "k_delay": k_delay,
+                "ridge": 1e-6
+            }
 
-        # 6. Interactive Readout Selection
-        heatmap[i, j] = np.nanmean(capacities)
+            trainer = Trainer(
+                loader=loader,
+                features=features,
+                readout=Ridge(benchmark_args.get("ridge")),
+                experiment_dir=experiment_dir,
+                washout=5.0,
+                train_duration=10.0,
+                test_duration=10.0,
+            )
+            
+            # 4. First Run: Calculate all capacities
+            print(f"\n--- Running Initial Benchmark to Calculate All Capacities ---")
+            score = benchmark.run(trainer, u_input, **benchmark_args)
+            score.save()
+            print("--- Initial run complete. ---")
 
-    plot_heatmap(heatmap, n_list, tau_d_list, k_delay=30, amp=1, n=9)
+            # 5. Print key metrics and prepare for interactive selection
+            if not score.metrics:
+                print("Benchmark did not produce any metrics. Exiting.")
+                return
+
+            print("\n[Benchmark Results]")
+            print(f"  >> Total Capacity: {score.metrics.get('total_capacity', 0):.4f}")
+            print(f"  >> Linear Memory Capacity: {score.metrics.get('linear_memory_capacity', 0):.4f}")
+            print(f"  >> Nonlinear Memory Capacity: {score.metrics.get('nonlinear_memory_capacity', 0):.4f}")
+
+            capacities = score.metrics.get('capacities')
+            basis_names_bytes = score.metrics.get('basis_names', [])
+            basis_names = [name.decode('utf-8') for name in basis_names_bytes]
+
+            if capacities is None or not basis_names:
+                print("No capacities or basis names found in metrics. Exiting.")
+                return
+
+            # 6. Interactive Readout Selection
+            heatmap[i, j] = np.nanmean(capacities)
+
+        plot_heatmap(heatmap, n_list, tau_d_list, k_delay=k_delay, amp=1, n=16, save_dir=save_path, save_svg=True)
     
 
 if __name__ == "__main__":
