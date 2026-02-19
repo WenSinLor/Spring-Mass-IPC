@@ -55,6 +55,7 @@ class MarkerTracker:
             # Get bounding box to check shape
             x, y, w, h = cv2.boundingRect(c)
             aspect_ratio = float(w) / h
+            # print(f"Area {area}: {aspect_ratio}")
             
             # --- FILTERING LOGIC ---
             
@@ -73,6 +74,7 @@ class MarkerTracker:
                 cX = int(M["m10"] / M["m00"])
                 cY = int(M["m01"] / M["m00"])
                 found_centroids.append((cX, cY))
+                # print(f"Area {area}: added\n")
         
         return found_centroids
 

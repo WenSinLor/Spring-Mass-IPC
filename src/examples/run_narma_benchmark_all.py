@@ -11,7 +11,8 @@ sys.path.insert(0, str(src_dir))
 
 # --- Core Library Imports ---
 from openprc.reservoir.io.state_loader import StateLoader
-from openprc.reservoir.features.node_features import NodePositions
+from openprc.reservoir.features.node_features import NodePositions, NodeDisplacements
+from openprc.reservoir.features.bar_features import BarLengths, BarExtensions
 from openprc.reservoir.readout.ridge import Ridge
 from openprc.reservoir.training.trainer import Trainer
 from openprc.analysis.visualization.time_series import TimeSeriesComparison
@@ -44,11 +45,12 @@ def process_single_experiment(h5_path):
         return False
         
     if u_raw.ndim > 1: u_raw = u_raw.flatten()
+    u_scaled = (u_raw - np.nanmin(u_raw)) / (np.nanmax(u_raw) - np.nanmin(u_raw)) * 0.5
     # print(f"   Actuation Loaded (Shape: {u_raw.shape})")
 
     # 2. Setup Trainer
     try:
-        features = NodePositions() # Extracts pixels
+        features = NodeDisplacements(reference_node=0, dims=[0]) # Extracts pixels
         
         trainer = Trainer(
             loader=loader,
@@ -68,7 +70,7 @@ def process_single_experiment(h5_path):
         benchmark = NARMABenchmark(group_name="narma_benchmark")
         
         # Run benchmark (Standard 2nd Order NARMA as per your code)
-        score = benchmark.run(trainer, u_raw, order=2)
+        score = benchmark.run(trainer, u_scaled, order=2)
         score.save()
         
         # print(f"   -> Metrics saved to metrics.h5")
@@ -89,7 +91,7 @@ def process_single_experiment(h5_path):
 
     # 5. Print Summary Metric (Optional)
     if score.metrics:
-        nmse = score.metrics.get('narma2_nmse', 'N/A')
+        nmse = score.metrics.get('narma2_nrmse', 'N/A')
         print(f"   [Done] NMSE: {nmse}")
     
     return True
@@ -98,7 +100,7 @@ def main():
     print("Starting Global Benchmark Run...")
     
     # 1. Locate Data Root
-    data_root = src_dir.parent / "data" / "experiment_data"
+    data_root = src_dir.parent / "data" / "experiment_data" / "topology_6_narma"
     
     if not data_root.exists():
         print(f"[Error] Data directory not found: {data_root}")

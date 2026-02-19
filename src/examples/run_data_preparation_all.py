@@ -35,11 +35,11 @@ def main():
     DATA_DIR = current_script_dir.parent.parent / "data"
     
     # Input Directories
-    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_5"
-    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_5"
+    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_7"
+    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_7"
     
     # Base Output Directory
-    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_5"
+    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_7"
 
     # --- 1. SCAN AND PAIR FILES ---
     # Get sorted lists
@@ -85,7 +85,7 @@ def main():
         # STAGE 1: VIDEO PROCESSING
         # ==========================================
         print(f"   Expecting a {GRID_ROWS}x{GRID_COLS} grid.")
-        tracker = MarkerTracker(LOWER_RED1, UPPER_RED1, LOWER_RED2, UPPER_RED2, min_area=10000, max_area=20000)
+        tracker = MarkerTracker(LOWER_RED1, UPPER_RED1, LOWER_RED2, UPPER_RED2, min_area=5000, max_area=20000)
         video_proc = VideoProcessor(VIDEO_FILE, XML_FILE, tracker)
         
         # Initialize DataWriter with the specific amplitude folder

@@ -19,8 +19,8 @@ def main():
     # 1. Setup Path
     current_script_dir = Path(__file__).parent.resolve()
     DATA_DIR = current_script_dir.parent.parent / "data"
-    VIDEO_FILE = DATA_DIR / "camera_data" / "topology_5" / "C1086.MP4"
-    OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_5" / "spring_mass_data.npz"
+    VIDEO_FILE = DATA_DIR / "camera_data" / "topology_7" / "C1109.MP4"
+    OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_7" / "spring_mass_data.npz"
 
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -31,7 +31,7 @@ def main():
     upper_red2 = np.array([180, 255, 255])
 
     # Area filter: 10k to 20k pixels
-    tracker = MarkerTracker(lower_red1, upper_red1, lower_red2, upper_red2, min_area=10000, max_area=25000)
+    tracker = MarkerTracker(lower_red1, upper_red1, lower_red2, upper_red2, min_area=9000, max_area=20000)
 
     # 3. Setup Visualization
     window_name = "2x2 View: Clean | Mask | Tracking | Dots"

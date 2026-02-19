@@ -42,7 +42,7 @@ def main():
     
     # 2. Shared Setup
     loader = StateLoader(h5_path)
-    features = BarExtensions()
+    features = NodePositions()
     u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
     
     print(f"Loaded {loader.total_frames} frames from {h5_path.name}")

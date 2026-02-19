@@ -26,7 +26,7 @@ def process_file(input_h5_path):
     output_plot_path = amp_folder / 'slicing_summary_plot.svg'
 
     # Settings
-    duration = 30          # seconds per slice
+    duration = 30         # seconds per slice
     num_samples = 5        # Number of samples to find
 
     # ==========================================
@@ -147,7 +147,7 @@ def main():
     
     current_script_dir = Path(__file__).parent.resolve()
     # Path to Topology Root
-    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_5"
+    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_5_prestress_narma_payload"
     
     if not DATA_DIR.exists():
         print(f"[Error] Directory not found: {DATA_DIR}")

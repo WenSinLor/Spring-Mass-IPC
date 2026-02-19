@@ -26,8 +26,8 @@ def process_file(input_h5_path):
     output_plot_path = amp_folder / 'slicing_summary_plot.svg'
 
     # Settings
-    duration = 30          # seconds per slice
-    num_samples = 5        # Number of samples to find
+    duration = 179.8          # seconds per slice
+    num_samples = 1        # Number of samples to find
 
     # ==========================================
     # 2. Load & Preprocess Data
@@ -40,76 +40,81 @@ def process_file(input_h5_path):
         # 1. Get FPS
         fps = f.attrs.get('fps', 29.97)
         
-        # 2. Load Raw Trajectories
+        # 2. Load Raw Trajectories & Time
         raw_trajectories = f['trajectories'][:]
+        video_time = f.get('video_time')
+        if video_time is None:
+            print("   [Warning] 'video_time' not found. Using FPS to generate a placeholder time axis.")
+            video_time = np.arange(len(raw_trajectories)) / fps
+        else:
+            video_time = video_time[:]
         
         # 3. Reconstruct Displacement Signal (Node 0, X-Axis)
         raw_x = raw_trajectories[:, 0, 0]
         displacement_data = -(raw_x - raw_x[0])
         
-    print(f"   Loaded {len(displacement_data)} points (FPS: {fps:.2f})")
+    print(f"   Loaded {len(displacement_data)} points over {video_time[-1]:.1f}s (FPS: {fps:.2f})")
 
     # Calculate exact points needed per slice
     points_per_sample = int(fps * duration)
 
     # ==========================================
-    # 3. Systematic Trigger & Slice
+    # 3. Interactive Slicing
     # ==========================================
+    # Plot the full data for visual selection
+    plt.figure(figsize=(15, 6))
+    plt.plot(video_time, displacement_data, label='Full Displacement Signal', marker='.', linestyle='-')
+    plt.xlabel("Time (s)")
+    plt.ylabel("Displacement (px)")
+    plt.title("Select Start Time - Close this window to continue")
+    plt.grid(True)
+    plt.legend()
+    print("   Displaying plot... Close the plot window to enter a start time.")
+    plt.show()
+
+    # Prompt user for start time
+    try:
+        user_start_time_str = input(">>> Enter desired start time (in seconds): ")
+        user_start_time = float(user_start_time_str)
+    except (ValueError, TypeError):
+        print("   [Error] Invalid input. Aborting.")
+        return
+
+    # Find the index closest to the user's desired start time
+    start_idx = np.argmin(np.abs(video_time - user_start_time))
+    end_idx = start_idx + points_per_sample
+    
+    print(f"   User selected start time: {user_start_time:.2f}s (Closest Index: {start_idx})")
+
     sliced_data_list = []
-    current_search_idx = 0
+    # Check bounds before slicing
+    if end_idx > len(displacement_data):
+        available_pts = len(displacement_data) - start_idx
+        available_time = (video_time[-1] - video_time[start_idx]) if available_pts > 0 else 0
+        print(f"   [Stop] Not enough data from the selected start point.")
+        print(f"          Required points: {points_per_sample}, Available from index {start_idx}: {available_pts} (~{available_time:.1f}s)")
+        return # Exit the function if not enough data
 
-    # Auto-calculate threshold
-    trigger_threshold = np.max(np.abs(displacement_data)) * 0.34
-    print(f"   Threshold: {trigger_threshold:.2f} pixels")
-
-    for i in range(num_samples):
-        remaining_data = np.abs(displacement_data[current_search_idx:])
-        
-        if len(remaining_data) == 0:
-            print(f"   [Stop] No more data for Sample {i}.")
-            break
-
-        # Find start of burst
-        trigger_rel = np.argmax(remaining_data > trigger_threshold)
-        
-        # Safety check
-        if remaining_data[trigger_rel] <= trigger_threshold:
-            print(f"   [Stop] Signal below threshold for Sample {i}.")
-            break
-            
-        start_idx = current_search_idx + trigger_rel
-        # Back up slightly (0.2s) to catch the rising edge
-        start_idx = max(0, start_idx - int(0.2 * fps))
-        end_idx = start_idx + points_per_sample
-        
-        # Check bounds
-        if end_idx > len(displacement_data):
-            print(f"   [Stop] Not enough data for Sample {i}.")
-            break
-            
-        # Slice the data
-        segment = displacement_data[start_idx : end_idx]
-        sliced_data_list.append(segment)
-        
-        # --- SAVE INDIVIDUAL SLICE ---
-        # Structure: amp=X / sample_i / displacement_slice.h5
-        sample_dir = amp_folder / f"sample_{i}"
-        sample_dir.mkdir(parents=True, exist_ok=True)
-        
-        slice_output_path = sample_dir / 'displacement_slice.h5'
-        
-        try:
-            with h5py.File(slice_output_path, 'w') as hf_out:
-                hf_out.create_dataset('displacement', data=segment)
-                hf_out.attrs['fps'] = fps
-                hf_out.attrs['duration'] = duration
-                hf_out.attrs['start_frame_index'] = start_idx
-            print(f"   -> Saved: sample_{i}/displacement_slice.h5")
-        except Exception as e:
-            print(f"   [Error] Failed to save H5: {e}")
-        
-        # Move cursor forward (add 2s buffer)
-        current_search_idx = end_idx + int(2.0 * fps)
+    # Slice the data and save it
+    segment = displacement_data[start_idx : end_idx]
+    sliced_data_list.append(segment)
+    
+    # --- SAVE INDIVIDUAL SLICE ---
+    # This interactive version saves one slice as sample_0
+    sample_dir = amp_folder / "sample_0"
+    sample_dir.mkdir(parents=True, exist_ok=True)
+    
+    slice_output_path = sample_dir / 'displacement_slice.h5'
+    
+    try:
+        with h5py.File(slice_output_path, 'w') as hf_out:
+            hf_out.create_dataset('displacement', data=segment)
+            hf_out.attrs['fps'] = fps
+            hf_out.attrs['duration'] = duration
+            hf_out.attrs['start_frame_index'] = start_idx
+        print(f"   -> Saved: sample_0/displacement_slice.h5")
+    except Exception as e:
+        print(f"   [Error] Failed to save H5: {e}")
 
     # ==========================================
     # 4. Plotting (Summary)
@@ -148,7 +153,7 @@ def main():
     
     current_script_dir = Path(__file__).parent.resolve()
     # Path to the Topology root folder
-    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_1" / "amp=0.2"
+    DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_5_prestress_narma_multiplex" / "amp=1"
     
     if not DATA_DIR.exists():
         print(f"[Error] Directory not found: {DATA_DIR}")

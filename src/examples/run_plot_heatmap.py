@@ -14,7 +14,7 @@ sys.path.insert(0, str(src_dir))
 # --- Core Library Imports ---
 from openprc.analysis.benchmarks.memory_benchmark import MemoryBenchmark
 from openprc.reservoir.io.state_loader import StateLoader
-from openprc.reservoir.features.node_features import NodePositions
+from openprc.reservoir.features.node_features import NodePositions, NodeDisplacements
 from openprc.reservoir.features.bar_features import BarExtensions, BarLengths
 from openprc.reservoir.training.trainer import Trainer
 from openprc.reservoir.readout.ridge import Ridge
@@ -106,7 +106,7 @@ def main():
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_5"
+        TOPOLOGY = "topology_7"
         AMPLITUDE = "amp=1"
         SAMPLE = f"sample_{i}"
         
@@ -123,7 +123,7 @@ def main():
         
         # 2. Shared Setup
         loader = StateLoader(h5_path)
-        features = NodePositions()
+        features = NodeDisplacements(reference_node=0, dims=[0])
         u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
         
         print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
@@ -158,20 +158,20 @@ def main():
             )
             
             # 4. First Run: Calculate all capacities
-            print(f"\n--- Running Initial Benchmark to Calculate All Capacities ---")
+            # print(f"\n--- Running Initial Benchmark to Calculate All Capacities ---")
             score = benchmark.run(trainer, u_input, **benchmark_args)
             score.save()
-            print("--- Initial run complete. ---")
+            # print("--- Initial run complete. ---")
 
             # 5. Print key metrics and prepare for interactive selection
             if not score.metrics:
                 print("Benchmark did not produce any metrics. Exiting.")
                 return
 
-            print("\n[Benchmark Results]")
-            print(f"  >> Total Capacity: {score.metrics.get('total_capacity', 0):.4f}")
-            print(f"  >> Linear Memory Capacity: {score.metrics.get('linear_memory_capacity', 0):.4f}")
-            print(f"  >> Nonlinear Memory Capacity: {score.metrics.get('nonlinear_memory_capacity', 0):.4f}")
+            # print("\n[Benchmark Results]")
+            # print(f"  >> Total Capacity: {score.metrics.get('total_capacity', 0):.4f}")
+            # print(f"  >> Linear Memory Capacity: {score.metrics.get('linear_memory_capacity', 0):.4f}")
+            # print(f"  >> Nonlinear Memory Capacity: {score.metrics.get('nonlinear_memory_capacity', 0):.4f}")
 
             capacities = score.metrics.get('capacities')
             basis_names_bytes = score.metrics.get('basis_names', [])
