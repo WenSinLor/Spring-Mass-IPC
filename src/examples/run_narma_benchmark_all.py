@@ -55,7 +55,7 @@ def process_single_experiment(h5_path):
         trainer = Trainer(
             loader=loader,
             features=features,
-            readout=Ridge(1e-5),
+            readout=Ridge(1e-3),
             experiment_dir=experiment_dir,
             washout=5.0,
             train_duration=10.0,
@@ -100,7 +100,7 @@ def main():
     print("Starting Global Benchmark Run...")
     
     # 1. Locate Data Root
-    data_root = src_dir.parent / "data" / "experiment_data" / "topology_6_narma"
+    data_root = src_dir.parent / "data" / "experiment_data" / "topology_7_narma"
     
     if not data_root.exists():
         print(f"[Error] Data directory not found: {data_root}")

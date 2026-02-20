@@ -106,7 +106,7 @@ def main():
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_7"
+        TOPOLOGY = "topology_6"
         AMPLITUDE = "amp=1"
         SAMPLE = f"sample_{i}"
         
@@ -143,8 +143,7 @@ def main():
             benchmark_args = {
                 "tau_s": tau_s,
                 "n_s": n_s,
-                "k_delay": k_delay,
-                "ridge": 1e-6
+                "k_delay": k_delay
             }
 
             trainer = Trainer(
