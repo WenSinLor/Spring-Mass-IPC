@@ -59,10 +59,11 @@ def main():
     # 3. Define Benchmark and its arguments
     benchmark = MemoryBenchmark(group_name="memory_benchmark")
     benchmark_args = {
-        "tau_s": 120,     # Increased to look further back since k_delay is 1
-        "n_s": 3,
+        "tau_s": 90,     # Increased to look further back since k_delay is 1
+        "n_s": 4,
         "k_delay": 1,    # Changed to 1
-        "eps": eps
+        "eps": eps,
+        "ridge": 1e-6
     }
 
     trainer = Trainer(
