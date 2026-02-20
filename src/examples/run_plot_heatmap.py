@@ -174,7 +174,8 @@ def main():
                 "tau_s": tau_s,
                 "n_s": n_s,
                 "k_delay": k_delay,
-                "eps": eps
+                "eps": eps,
+                "ridge": 1e-6
             }
 
             trainer = Trainer(

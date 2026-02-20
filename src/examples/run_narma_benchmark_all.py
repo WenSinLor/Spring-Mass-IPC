@@ -91,8 +91,8 @@ def process_single_experiment(h5_path):
 
     # 5. Print Summary Metric (Optional)
     if score.metrics:
-        nmse = score.metrics.get('narma2_nrmse', 'N/A')
-        print(f"   [Done] NMSE: {nmse}")
+        nrmse = score.metrics.get('narma2_nrmse', 'N/A')
+        print(f"   [Done] NRMSE: {nrmse}")
     
     return True
 
