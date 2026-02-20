@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from itertools import product
+from scipy.stats import chi2
 
 # --- Path Setup ---
 current_dir = Path(__file__).parent
@@ -19,6 +20,32 @@ from openprc.reservoir.features.bar_features import BarExtensions, BarLengths
 from openprc.reservoir.training.trainer import Trainer
 from openprc.reservoir.readout.ridge import Ridge
 from openprc.analysis.visualization.time_series import TimeSeriesComparison
+
+
+def calculate_dambre_epsilon(effective_rank: int, test_duration: int, p_value: float = 1e-4) -> float:
+    """
+    Calculates the exact theoretical threshold (epsilon) for IPC 
+    based on Dambre et al.'s chi-squared method.
+    
+    Parameters:
+    - effective_rank (N): The number of independent state variables (e.g., 9).
+    - test_duration (T): The number of samples in your test set.
+    - p_value (p): The acceptable probability of a false positive (default 10^-4).
+    
+    Returns:
+    - epsilon: The strict cutoff value to use in the Heaviside step function.
+    """
+    # 1. Find the threshold 't' using the Inverse Survival Function (ISF) 
+    # of the chi-squared distribution with N degrees of freedom.
+    # This finds 't' such that P(chi^2(N) >= t) = p
+    t = chi2.isf(p_value, df=effective_rank)
+    
+    # 2. Calculate the final epsilon: 2t / T
+    # The factor of 2 is the intentional doubling to account for 
+    # non-independent variables in real dynamical systems.
+    epsilon = (2.0 * t) / test_duration
+    
+    return epsilon
 
 
 def plot_heatmap(
@@ -105,8 +132,11 @@ def main():
     
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
+    N = 9
+    T = 300
+    eps = calculate_dambre_epsilon(effective_rank=N, test_duration=T)
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_6"
+        TOPOLOGY = "topology_7"
         AMPLITUDE = "amp=1"
         SAMPLE = f"sample_{i}"
         
@@ -143,7 +173,8 @@ def main():
             benchmark_args = {
                 "tau_s": tau_s,
                 "n_s": n_s,
-                "k_delay": k_delay
+                "k_delay": k_delay,
+                "eps": eps
             }
 
             trainer = Trainer(
