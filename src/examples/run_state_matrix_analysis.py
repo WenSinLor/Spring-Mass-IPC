@@ -117,7 +117,7 @@ def main():
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_6"
+        TOPOLOGY = "topology_8"
         AMPLITUDE = "amp=1"
         SAMPLE = f"sample_{i}"
         
@@ -131,8 +131,8 @@ def main():
     
         # 2. Shared Setup
         loader = StateLoader(h5_path)
-        features = NodeDisplacements(reference_node=0, dims=[0])
-        u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
+        features = NodeDisplacements(reference_node=1, dims=[0])
+        u_input = loader.get_actuation_signal(actuator_idx=1, dof=0)
         
         print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
 

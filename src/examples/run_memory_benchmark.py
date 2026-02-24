@@ -20,7 +20,7 @@ from openprc.reservoir.readout.ridge import Ridge
 from openprc.analysis.visualization.time_series import TimeSeriesComparison
 
 
-N = 9            # Your effective rank
+N = 9.5            # Your effective rank
 T = 300        # Assuming 300 test steps (adjust to your actual test_duration)
 
 def main():
@@ -31,9 +31,9 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_7"
+    TOPOLOGY = "topology_8"
     AMPLITUDE = "amp=1"
-    SAMPLE = "sample_4"
+    SAMPLE = "sample_0"
     
     data_root = src_dir.parent / "data" / "experiment_data"
     experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
@@ -60,7 +60,7 @@ def main():
     benchmark = MemoryBenchmark(group_name="memory_benchmark")
     benchmark_args = {
         "tau_s": 90,     # Increased to look further back since k_delay is 1
-        "n_s": 2,
+        "n_s": 1,
         "k_delay": 1,    # Changed to 1
         "eps": eps,
         "ridge": 1e-6

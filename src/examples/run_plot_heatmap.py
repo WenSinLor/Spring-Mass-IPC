@@ -132,11 +132,11 @@ def main():
     
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
-    N = 9
+    N = 9.5
     T = 300
     eps = calculate_dambre_epsilon(effective_rank=N, test_duration=T)
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_7"
+        TOPOLOGY = "topology_8"
         AMPLITUDE = "amp=1"
         SAMPLE = f"sample_{i}"
         

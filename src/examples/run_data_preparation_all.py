@@ -35,11 +35,11 @@ def main():
     DATA_DIR = current_script_dir.parent.parent / "data"
     
     # Input Directories
-    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_7"
-    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_7"
+    CAMERA_DATA_DIR = DATA_DIR / "camera_data" / "topology_8_narma"
+    SENSOR_DATA_DIR = DATA_DIR / "vibrometer_data" / "topology_8_narma"
     
     # Base Output Directory
-    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_7"
+    EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_8_narma"
 
     # --- 1. SCAN AND PAIR FILES ---
     # Get sorted lists
