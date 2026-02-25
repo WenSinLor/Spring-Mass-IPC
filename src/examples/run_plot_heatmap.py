@@ -132,11 +132,11 @@ def main():
     
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
-    N = 9.5
+    N = 6
     T = 300
     eps = calculate_dambre_epsilon(effective_rank=N, test_duration=T)
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_8"
+        TOPOLOGY = "topology_6"
         AMPLITUDE = "amp=1"
         SAMPLE = f"sample_{i}"
         
@@ -159,9 +159,9 @@ def main():
         print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
         
         # 3. Define Benchmark and its arguments
-        n_list = list(range(1, 9))
-        tau_d_list = list(range(10))
-        k_delay = 3
+        n_list = list(range(1, 5))
+        tau_d_list = list(range(30))
+        k_delay = 1
 
         heatmap = np.empty((len(n_list), len(tau_d_list)), dtype=float)
 
