@@ -86,9 +86,9 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_9"
+    TOPOLOGY = "topology_9_prestress"
     AMPLITUDE = "amp=2.5"
-    SAMPLE = "sample_2"
+    SAMPLE = "sample_0"
     
     data_root = src_dir.parent / "data" / "experiment_data"
     experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
