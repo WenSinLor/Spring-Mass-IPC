@@ -1,8 +1,11 @@
 import sys
+import os
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-from pathlib import Path
+from tqdm import tqdm
+from itertools import product
+from scipy.stats import chi2
 from sklearn.preprocessing import StandardScaler
 
 # --- Path Setup ---
@@ -11,173 +14,263 @@ src_dir = current_dir.parent
 sys.path.insert(0, str(src_dir))
 
 # --- Core Library Imports ---
+from openprc.analysis.benchmarks.memory_benchmark import MemoryBenchmark
 from openprc.reservoir.io.state_loader import StateLoader
-from openprc.reservoir.features.node_features import NodeDisplacements
-from openprc.reservoir.readout.ridge import Ridge
+from openprc.reservoir.features.node_features import NodePositions, NodeDisplacements
+from openprc.reservoir.features.bar_features import BarExtensions, BarLengths
 from openprc.reservoir.training.trainer import Trainer
-from openprc.analysis.benchmarks.custom_benchmark import CustomBenchmark
+from openprc.reservoir.readout.ridge import Ridge
+from openprc.analysis.visualization.time_series import TimeSeriesComparison
 
 
-def state_matrix_analysis_logic(benchmark, trainer, u_input, **kwargs):
+def calculate_dambre_epsilon(effective_rank: int, test_duration: int, p_value: float = 1e-4) -> float:
     """
-    Computes the effective rank and conditioning number of the reservoir states matrix X_full.
-    """
-    # 1. Get X_full from trainer
-    X_full = trainer.features.transform(trainer.loader)
-    scaler_X = StandardScaler()
-    X_std = scaler_X.fit_transform(X_full)
+    Calculates the exact theoretical threshold (epsilon) for IPC 
+    based on Dambre et al.'s chi-squared method.
     
-    # 1. Singular Value Decomposition (SVD)
-    U, s, Vh = np.linalg.svd(X_std, full_matrices=False)
+    Parameters:
+    - effective_rank (N): The number of independent state variables (e.g., 9).
+    - test_duration (T): The number of samples in your test set.
+    - p_value (p): The acceptable probability of a false positive (default 10^-4).
     
-    # Normalize singular values
-    s_norm = s / np.sum(s)
-    
-    # 2. Calculate Effective Rank (Entropy of singular values)
-    # Higher value = More independent nodes (Good!)
-    effective_rank = np.exp(-np.sum(s_norm * np.log(s_norm + 1e-12)))
-    
-    # 3. Calculate Condition Number
-    # Lower value = More stable readout (Good!)
-    cond_num = s[0] / s[-1]
-
-    # 4. PCA Analysis for dimensionality
-    pca = PCA()
-    pca.fit(X_std)
-    cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
-    
-    # Find the number of components to explain 95% of the variance
-    n_components_95 = np.argmax(cumulative_variance >= 0.95) + 1
-
-    # 5. Define the metrics and metadata dictionaries to be returned
-    metrics = {
-        'effective_rank': effective_rank,
-        'condition_number': cond_num,
-        'pca_95_variance_components': n_components_95,
-    }
-    metadata = {
-        'feature_type': trainer.features.__class__.__name__,
-        'benchmark_class': benchmark.__class__.__name__
-    }
-    
-    return metrics, metadata
-
-def analyze_reservoir_pca(states, n_components=None, plot=True):
-    """
-    Performs PCA on reservoir states to analyze effective dimensionality.
-    
-    Args:
-        states (np.ndarray): Shape (Time_Steps, Num_Nodes).
-        n_components (int): Number of PCs to compute (default: all).
-        plot (bool): Whether to plot the Scree plot and PC trajectories.
-        
     Returns:
-        pca (sklearn.PCA): The fitted PCA object.
-        states_pca (np.ndarray): The states projected onto the principal components.
-        cumulative_variance (np.ndarray): Cumulative explained variance ratio.
+    - epsilon: The strict cutoff value to use in the Heaviside step function.
     """
-    # 1. STANDARDIZE (Crucial for Physical Reservoirs)
-    # This removes the "Loudness" bias so we can see the "Structure"
-    scaler = StandardScaler()
-    states_std = scaler.fit_transform(states)
+    # 1. Find the threshold 't' using the Inverse Survival Function (ISF) 
+    # of the chi-squared distribution with N degrees of freedom.
+    # This finds 't' such that P(chi^2(N) >= t) = p
+    t = chi2.isf(p_value, df=effective_rank)
     
-    # 2. Perform PCA
-    if n_components is None:
-        n_components = min(states.shape)
-        
-    pca = PCA(n_components=n_components)
-    states_pca = pca.fit_transform(states_std)
+    # 2. Calculate the final epsilon: 2t / T
+    # The factor of 2 is the intentional doubling to account for 
+    # non-independent variables in real dynamical systems.
+    epsilon = (2.0 * t) / test_duration
     
-    # 3. Analyze Variance
-    explained_var = pca.explained_variance_ratio_
-    cumulative_var = np.cumsum(explained_var)
-    
-    # 4. Visualization
-    if plot:
-        plt.figure(figsize=(12, 5))
-        
-        # Plot A: Scree Plot (The "Energy Distribution")
-        plt.subplot(1, 1, 1)
-        plt.bar(range(1, len(explained_var) + 1), explained_var, label='Individual')
-        plt.plot(range(1, len(cumulative_var) + 1), cumulative_var, 's--', alpha=0.6, label='Cumulative')
-        plt.ylabel('Explained Variance Ratio')
-        plt.xlabel('Principal Component')
-        plt.title('Scree Plot: Where is the Information?')
-        plt.grid(True)
-        plt.legend()
-        
-        plt.tight_layout()
+    return epsilon
+
+
+def compute_effective_rank(loader, features) -> float:
+    """
+    Entropy-based effective rank (standard in reservoir computing).
+
+    Uses the Shannon entropy of normalised singular values:
+        s_norm         = s / sum(s)
+        effective_rank = exp( -sum(s_norm * log(s_norm)) )
+
+    Computed on the full state matrix with no washout stripping,
+    matching state_matrix_analysis_logic() exactly.
+
+    Parameters
+    ----------
+    loader   : StateLoader
+    features : feature extractor (e.g. NodeDisplacements)
+
+    Returns
+    -------
+    effective_rank : float
+    """
+    state_matrix = features.transform(loader)
+
+    if state_matrix.shape[0] < 2:
+        return 1.0
+
+    state_matrix = StandardScaler().fit_transform(state_matrix)
+    _, s, _      = np.linalg.svd(state_matrix, full_matrices=False)
+    s_norm       = s / np.sum(s)
+    return float(np.exp(-np.sum(s_norm * np.log(s_norm + 1e-12))))
+
+
+def compute_test_frames(loader, test_duration_s: float = 10.0) -> int:
+    """
+    Derive T (number of test frames) from fps stored in the H5 file.
+
+    Parameters
+    ----------
+    loader         : StateLoader
+    test_duration_s: same value passed as test_duration to Trainer
+
+    Returns
+    -------
+    T : int
+    """
+    import h5py
+    with h5py.File(loader.sim_path, 'r') as f:
+        fps = float(f.attrs.get('fps', 29.97))
+    return max(1, int(test_duration_s * fps))
+
+
+def plot_heatmap(
+    heatmap, n_list, tau_d_list, k_delay, amp, n,
+    vmin=None, vmax=None,
+    save_dir=None,
+    save_name=None,
+    save_svg=True,
+    save_png=False,
+    dpi=300,
+    show=True
+):
+    fig, ax = plt.subplots(figsize=(10, 8))
+    heatmap = heatmap.T
+
+    if heatmap is not None and n_list is not None and tau_d_list is not None:
+        title = (rf"$R^2$ (upper)", rf"num_mass={n}" + "\n" +
+                 rf"k={k_delay}, A={amp}")
+
+        if vmin is None:
+            vmin = 0.0
+        if vmax is None:
+            vmax = 1.0
+
+        im = ax.imshow(
+            heatmap, aspect='auto', origin='lower',
+            cmap='RdYlBu_r', vmin=vmin, vmax=vmax
+        )
+
+        n_rows, n_cols = heatmap.shape
+        for y in range(n_rows):
+            for x in range(n_cols):
+                r2_val = heatmap[y, x]
+
+                # Upper: R^2
+                if not np.isnan(r2_val):
+                    ax.text(x, y, f'{r2_val:.2f}',
+                            ha='center', va='center', color='black', fontsize=8)
+
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label('$R^2$ Mean')
+        ax.set_xlabel(r'$n$ (monomial degree)')
+        ax.set_ylabel(r'$\tau$ (time delay)')
+        ax.set_title(title, fontsize=8)
+
+        ax.set_xticks(np.arange(len(n_list)))
+        ax.set_yticks(np.arange(len(tau_d_list)))
+        ax.set_xticklabels(n_list, fontsize=6)
+        ax.set_yticklabels((np.array(tau_d_list) * k_delay), fontsize=6)
+
+    fig.tight_layout()
+
+    # ---- Save here (before show) ----
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+
+        if save_name is None:
+            # Default filename
+            save_name = f"heatmap_R2_n{n}_A{amp}_k{k_delay}"
+
+        if save_svg:
+            svg_path = os.path.join(save_dir, f"{save_name}.svg")
+            fig.savefig(svg_path, format="svg", bbox_inches="tight")
+            print(f"[Saved] Heatmap SVG -> {svg_path}", flush=True)
+
+        if save_png:
+            png_path = os.path.join(save_dir, f"{save_name}.png")
+            fig.savefig(png_path, dpi=dpi, bbox_inches="tight")
+            print(f"[Saved] Heatmap PNG -> {png_path}", flush=True)
+
+    if show:
         plt.show()
+    else:
+        plt.close(fig)
+
+    return fig, ax
 
 def main():
     """
-    An example pipeline that runs a custom benchmark to analyze the reservoir state matrix.
+    A pipeline to run the memory benchmark on a given experiment.
+    This script will first run the benchmark to calculate all memory capacities,
+    then prompt the user to select which readout to train and save permanently.
     """
     
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_6"
+        TOPOLOGY = "topology_8"
         AMPLITUDE = "amp=1"
         SAMPLE = f"sample_{i}"
         
         data_root = src_dir.parent / "data" / "experiment_data"
         experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
         h5_path = experiment_dir / "experiment.h5"
+        save_path = experiment_dir / "plots"
 
         if not h5_path.exists():
-            print(f"Simulation missing at {h5_path}! Please run a simulation first.")
-            continue
-    
+            print(f"[Error] Experiment file not found: {h5_path}")
+            return
+
+        print(f"-> Loading Experiment: {AMPLITUDE} / {SAMPLE}")
+        
         # 2. Shared Setup
         loader = StateLoader(h5_path)
-        features = NodeDisplacements(reference_node=1, dims=[0])
-        u_input = loader.get_actuation_signal(actuator_idx=1, dof=0)
+        features = NodeDisplacements(reference_node=0, dims=[0, 1])
+        u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
         
         print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
 
-        # Run PCA analysis
-        states = features.transform(loader)
-        analyze_reservoir_pca(states, plot=True)
-
-        # 3. Define the Trainer
-        # Note: The trainer is required by the benchmark, but for this specific analysis,
-        # we don't need to run the training process itself. We only need the trainer
-        # to get access to the features and other experiment settings.
-        trainer = Trainer(
-            loader=loader,
-            features=features,
-            readout=Ridge(1e-5), # Dummy readout, not used in this benchmark
-            experiment_dir=experiment_dir
-        )
-
-        # 4. Instantiate and run the CustomBenchmark
-        benchmark = CustomBenchmark(
-            group_name="state_matrix_analysis",
-            benchmark_logic=state_matrix_analysis_logic
-        )
+        # Per-sample effective rank and test frame count
+        N = compute_effective_rank(loader, features)
+        T = compute_test_frames(loader, test_duration_s=10.0)
+        eps = calculate_dambre_epsilon(effective_rank=N, test_duration=T)
+        print(f"  Effective rank (N): {N:.4f}   Test frames (T): {T}   Epsilon: {eps:.6f}")
         
-        print(f"Running benchmark: {benchmark.__class__.__name__}")
-        score = benchmark.run(trainer, u_input)
-        score.save(filename="metrics.h5")
-        
-        print(f"--- Benchmark complete for: {experiment_dir.name} ---")
+        # 3. Define Benchmark and its arguments
+        n_list = list(range(1, 5))
+        tau_d_list = list(range(30))
+        k_delay = 1
 
-        # 5. Print Metrics
-        if score.metrics:
-            print("\n[Processing] Printing Benchmark Results:")
-            def print_metrics(metrics_dict, indent=""):
-                for key, value in metrics_dict.items():
-                    print_prefix = f"{indent}>> {key}: "
-                    if isinstance(value, dict):
-                        print(f"{indent}>> {key}:")
-                        print_metrics(value, indent + "  ")
-                    elif isinstance(value, (int, float, np.number)):
-                        print(f"{print_prefix}{value:.5f}")
-                    else:
-                        print(f"{print_prefix}{value}")
-            print_metrics(score.metrics, indent="  ")
+        heatmap = np.empty((len(n_list), len(tau_d_list)), dtype=float)
 
+        idx_pairs = list(product(range(len(n_list)), range(len(tau_d_list))))
+        for (i, j) in tqdm(idx_pairs, total=len(idx_pairs), leave=True):
+            n_s = n_list[i]
+            tau_s = tau_d_list[j]
+            benchmark = MemoryBenchmark(group_name="memory_benchmark")
+            benchmark_args = {
+                "tau_s": tau_s,
+                "n_s": n_s,
+                "k_delay": k_delay,
+                "eps": eps,
+                "ridge": 1e-6
+            }
+
+            trainer = Trainer(
+                loader=loader,
+                features=features,
+                readout=Ridge(benchmark_args.get("ridge")),
+                experiment_dir=experiment_dir,
+                washout=5.0,
+                train_duration=10.0,
+                test_duration=10.0,
+            )
+            
+            # 4. First Run: Calculate all capacities
+            # print(f"\n--- Running Initial Benchmark to Calculate All Capacities ---")
+            score = benchmark.run(trainer, u_input, **benchmark_args)
+            score.save()
+            # print("--- Initial run complete. ---")
+
+            # 5. Print key metrics and prepare for interactive selection
+            if not score.metrics:
+                print("Benchmark did not produce any metrics. Exiting.")
+                return
+
+            # print("\n[Benchmark Results]")
+            # print(f"  >> Total Capacity: {score.metrics.get('total_capacity', 0):.4f}")
+            # print(f"  >> Linear Memory Capacity: {score.metrics.get('linear_memory_capacity', 0):.4f}")
+            # print(f"  >> Nonlinear Memory Capacity: {score.metrics.get('nonlinear_memory_capacity', 0):.4f}")
+
+            capacities = score.metrics.get('capacities')
+            basis_names_bytes = score.metrics.get('basis_names', [])
+            basis_names = [name.decode('utf-8') for name in basis_names_bytes]
+
+            if capacities is None or not basis_names:
+                print("No capacities or basis names found in metrics. Exiting.")
+                return
+
+            # 6. Interactive Readout Selection
+            heatmap[i, j] = np.nanmean(capacities)
+
+        plot_heatmap(heatmap, n_list, tau_d_list, k_delay=k_delay, amp=1, n=16, save_dir=save_path, save_svg=True)
+    
 
 if __name__ == "__main__":
     main()

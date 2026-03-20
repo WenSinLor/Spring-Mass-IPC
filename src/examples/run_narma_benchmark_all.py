@@ -35,7 +35,7 @@ def process_single_experiment(h5_path):
     # 1. Load Actuation
     try:
         loader = StateLoader(h5_path)
-        u_raw = loader.get_actuation_signal(actuator_idx=1, dof=0)
+        u_raw = loader.get_actuation_signal(actuator_idx=0, dof=0)
     except Exception as e:
         print(f"   [Error] Failed to initialize StateLoader or get actuation: {e}")
         return False
@@ -50,7 +50,8 @@ def process_single_experiment(h5_path):
 
     # 2. Setup Trainer
     try:
-        features = NodeDisplacements(reference_node=1, dims=[0]) # Extracts pixels
+        # nodes = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14]
+        features = NodeDisplacements(reference_node=0, dims=[0, 1]) # Extracts pixels
         
         trainer = Trainer(
             loader=loader,
@@ -70,7 +71,7 @@ def process_single_experiment(h5_path):
         benchmark = NARMABenchmark(group_name="narma_benchmark")
         
         # Run benchmark (Standard 2nd Order NARMA as per your code)
-        score = benchmark.run(trainer, u_scaled, order=2)
+        score = benchmark.run(trainer, u_scaled, order=10)
         score.save()
         
         # print(f"   -> Metrics saved to metrics.h5")
@@ -100,7 +101,7 @@ def main():
     print("Starting Global Benchmark Run...")
     
     # 1. Locate Data Root
-    data_root = src_dir.parent / "data" / "experiment_data" / "topology_6_narma"
+    data_root = src_dir.parent / "data" / "experiment_data" / "topology_9_narma"
     
     if not data_root.exists():
         print(f"[Error] Data directory not found: {data_root}")

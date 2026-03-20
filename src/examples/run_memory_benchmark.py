@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from scipy.stats import chi2
+from sklearn.preprocessing import StandardScaler
 
 # --- Path Setup ---
 current_dir = Path(__file__).parent
@@ -20,8 +21,62 @@ from openprc.reservoir.readout.ridge import Ridge
 from openprc.analysis.visualization.time_series import TimeSeriesComparison
 
 
-N = 9.5            # Your effective rank
-T = 300        # Assuming 300 test steps (adjust to your actual test_duration)
+def calculate_dambre_epsilon(effective_rank: int, test_duration: int, p_value: float = 1e-4) -> float:
+    """
+    Calculates the exact theoretical threshold (epsilon) for IPC 
+    based on Dambre et al.'s chi-squared method.
+    
+    Parameters:
+    - effective_rank (N): The number of independent state variables (e.g., 9).
+    - test_duration (T): The number of samples in your test set.
+    - p_value (p): The acceptable probability of a false positive (default 10^-4).
+    
+    Returns:
+    - epsilon: The strict cutoff value to use in the Heaviside step function.
+    """
+    # 1. Find the threshold 't' using the Inverse Survival Function (ISF) 
+    # of the chi-squared distribution with N degrees of freedom.
+    # This finds 't' such that P(chi^2(N) >= t) = p
+    t = chi2.isf(p_value, df=effective_rank)
+    
+    # 2. Calculate the final epsilon: 2t / T
+    # The factor of 2 is the intentional doubling to account for 
+    # non-independent variables in real dynamical systems.
+    epsilon = (2.0 * t) / test_duration
+    
+    return epsilon
+
+
+def compute_effective_rank(loader, features) -> float:
+    """
+    Entropy-based effective rank (standard in reservoir computing).
+
+    Uses the Shannon entropy of normalised singular values:
+        s_norm         = s / sum(s)
+        effective_rank = exp( -sum(s_norm * log(s_norm)) )
+
+    Computed before get_actuation_signal to avoid any loader side effects.
+    """
+    state_matrix = features.transform(loader)
+
+    if state_matrix.shape[0] < 2:
+        return 1.0
+
+    state_matrix = StandardScaler().fit_transform(state_matrix)
+    _, s, _      = np.linalg.svd(state_matrix, full_matrices=False)
+    s_norm       = s / np.sum(s)
+    return float(np.exp(-np.sum(s_norm * np.log(s_norm + 1e-12))))
+
+
+def compute_test_frames(loader, test_duration_s: float = 10.0) -> int:
+    """
+    Derive T (number of test frames) from fps stored in the H5 file.
+    """
+    import h5py
+    with h5py.File(loader.sim_path, 'r') as f:
+        fps = float(f.attrs.get('fps', 29.97))
+    return max(1, int(test_duration_s * fps))
+
 
 def main():
     """
@@ -31,9 +86,9 @@ def main():
     """
     
     # 1. Define the Experiment Path
-    TOPOLOGY = "topology_8"
-    AMPLITUDE = "amp=1"
-    SAMPLE = "sample_0"
+    TOPOLOGY = "topology_9"
+    AMPLITUDE = "amp=2.5"
+    SAMPLE = "sample_2"
     
     data_root = src_dir.parent / "data" / "experiment_data"
     experiment_dir = data_root / TOPOLOGY / AMPLITUDE / SAMPLE
@@ -47,14 +102,20 @@ def main():
     
     # 2. Shared Setup
     loader = StateLoader(h5_path)
-    features = NodeDisplacements(reference_node=0, dims=[0]) 
+    features = NodeDisplacements(reference_node=0, dims=[0, 1])
+
+    print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
+
+    # Per-sample effective rank — computed before get_actuation_signal
+    # to match the call order in run_state_matrix_analysis.py
+    N = compute_effective_rank(loader, features)
+    T = compute_test_frames(loader, test_duration_s=10.0)
     u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
     # stride = 3
     # u_input = u_input[::stride]
-    
-    print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
 
     eps = calculate_dambre_epsilon(effective_rank=N, test_duration=T)
+    print(f"  Effective rank (N): {N:.4f}   Test frames (T): {T}   Epsilon: {eps:.6f}")
     
     # 3. Define Benchmark and its arguments
     benchmark = MemoryBenchmark(group_name="memory_benchmark")
@@ -164,7 +225,7 @@ def main():
             plt.savefig(plot_dir / "information_processing_capacity.svg")
             plt.close()
 
-    # --- NEW ADDITION: 8. Visualize Cumulative Linear Memory Capacity vs Delay (Tau) ---
+    # --- 8. Visualize Cumulative Linear Memory Capacity vs Delay (Tau) ---
     print("\n  >> Generating Cumulative Linear Capacity vs Tau plot...")
     
     exponents = score.metrics.get('exponents')
@@ -217,38 +278,13 @@ def main():
             ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=10))
             ax.grid(axis='y', linestyle='--', alpha=0.6)
 
-        plt.suptitle(f"IPC Analysis: {TOPOLOGY} | $N_{{eff}}={N}$ | $\\epsilon={eps:.4f}$", fontsize=14)
+        plt.suptitle(f"IPC Analysis: {TOPOLOGY} | $N_{{eff}}={N:.2f}$ | $\\epsilon={eps:.4f}$", fontsize=14)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         
         save_path = plot_dir / "unified_ipc_analysis.svg"
         plt.savefig(save_path)
         plt.show()
         print(f" >> Unified IPC plot saved to: {save_path}")
-
-def calculate_dambre_epsilon(effective_rank: int, test_duration: int, p_value: float = 1e-4) -> float:
-    """
-    Calculates the exact theoretical threshold (epsilon) for IPC 
-    based on Dambre et al.'s chi-squared method.
-    
-    Parameters:
-    - effective_rank (N): The number of independent state variables (e.g., 9).
-    - test_duration (T): The number of samples in your test set.
-    - p_value (p): The acceptable probability of a false positive (default 10^-4).
-    
-    Returns:
-    - epsilon: The strict cutoff value to use in the Heaviside step function.
-    """
-    # 1. Find the threshold 't' using the Inverse Survival Function (ISF) 
-    # of the chi-squared distribution with N degrees of freedom.
-    # This finds 't' such that P(chi^2(N) >= t) = p
-    t = chi2.isf(p_value, df=effective_rank)
-    
-    # 2. Calculate the final epsilon: 2t / T
-    # The factor of 2 is the intentional doubling to account for 
-    # non-independent variables in real dynamical systems.
-    epsilon = (2.0 * t) / test_duration
-    
-    return epsilon
 
 
 if __name__ == "__main__":

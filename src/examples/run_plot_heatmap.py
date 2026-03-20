@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from itertools import product
 from scipy.stats import chi2
+from sklearn.preprocessing import StandardScaler
 
 # --- Path Setup ---
 current_dir = Path(__file__).parent
@@ -46,6 +47,56 @@ def calculate_dambre_epsilon(effective_rank: int, test_duration: int, p_value: f
     epsilon = (2.0 * t) / test_duration
     
     return epsilon
+
+
+def compute_effective_rank(loader, features) -> float:
+    """
+    Entropy-based effective rank (standard in reservoir computing).
+
+    Uses the Shannon entropy of normalised singular values:
+        s_norm         = s / sum(s)
+        effective_rank = exp( -sum(s_norm * log(s_norm)) )
+
+    Computed on the full state matrix with no washout stripping,
+    matching state_matrix_analysis_logic() exactly.
+
+    Parameters
+    ----------
+    loader   : StateLoader
+    features : feature extractor (e.g. NodeDisplacements)
+
+    Returns
+    -------
+    effective_rank : float
+    """
+    state_matrix = features.transform(loader)
+
+    if state_matrix.shape[0] < 2:
+        return 1.0
+
+    state_matrix = StandardScaler().fit_transform(state_matrix)
+    _, s, _      = np.linalg.svd(state_matrix, full_matrices=False)
+    s_norm       = s / np.sum(s)
+    return float(np.exp(-np.sum(s_norm * np.log(s_norm + 1e-12))))
+
+
+def compute_test_frames(loader, test_duration_s: float = 10.0) -> int:
+    """
+    Derive T (number of test frames) from fps stored in the H5 file.
+
+    Parameters
+    ----------
+    loader         : StateLoader
+    test_duration_s: same value passed as test_duration to Trainer
+
+    Returns
+    -------
+    T : int
+    """
+    import h5py
+    with h5py.File(loader.sim_path, 'r') as f:
+        fps = float(f.attrs.get('fps', 29.97))
+    return max(1, int(test_duration_s * fps))
 
 
 def plot_heatmap(
@@ -132,12 +183,9 @@ def main():
     
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
-    N = 6
-    T = 300
-    eps = calculate_dambre_epsilon(effective_rank=N, test_duration=T)
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_6"
-        AMPLITUDE = "amp=1"
+        TOPOLOGY = "topology_9_prestress"
+        AMPLITUDE = "amp=2.5"
         SAMPLE = f"sample_{i}"
         
         data_root = src_dir.parent / "data" / "experiment_data"
@@ -153,10 +201,17 @@ def main():
         
         # 2. Shared Setup
         loader = StateLoader(h5_path)
-        features = NodeDisplacements(reference_node=0, dims=[0])
-        u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
-        
+        features = NodeDisplacements(reference_node=0, dims=[0, 1])
+
         print(f"Loaded {loader.total_frames} frames from {h5_path.name}")
+
+        # Per-sample effective rank — computed before get_actuation_signal
+        # to match the call order in run_state_matrix_analysis.py
+        N = compute_effective_rank(loader, features)
+        u_input = loader.get_actuation_signal(actuator_idx=0, dof=0)
+        T = compute_test_frames(loader, test_duration_s=10.0)
+        eps = calculate_dambre_epsilon(effective_rank=N, test_duration=T)
+        print(f"  Effective rank (N): {N:.4f}   Test frames (T): {T}   Epsilon: {eps:.6f}")
         
         # 3. Define Benchmark and its arguments
         n_list = list(range(1, 5))

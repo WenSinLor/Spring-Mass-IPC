@@ -100,7 +100,7 @@ def prepare_experiment_slices(input_file: Path):
     points_per_sample = int(fps * duration)
     
     # Dynamic Threshold
-    trigger_threshold = np.max(np.abs(displacement_data)) * 0.1
+    trigger_threshold = np.max(np.abs(displacement_data)) * 0.2
     print(f"   Slicing Threshold: {trigger_threshold:.2f} pixels")
     
     current_search_idx = 0
@@ -174,7 +174,7 @@ def prepare_experiment_slices(input_file: Path):
                 if act_slice is not None:
                     act = ts.create_group('actuation_signals')
                     # for node in [0, 2, 6, 8]:
-                    for node in [0, 3, 12, 15]: 
+                    for node in [0]: 
                         act.create_dataset(str(node), data=act_slice)
 
                 for k, v in metadata.items(): f_out.attrs[k] = v
@@ -196,7 +196,7 @@ def main():
     print("Starting script: Slice and Organize Experiment Samples.")
     
     current_script_dir = Path(__file__).parent.resolve()
-    EXPERIMENT_DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_7"
+    EXPERIMENT_DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_9_prestress"
     
     if not EXPERIMENT_DATA_DIR.exists():
         print(f"[Error] Directory not found: {EXPERIMENT_DATA_DIR}")
