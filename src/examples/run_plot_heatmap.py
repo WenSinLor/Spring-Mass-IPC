@@ -184,7 +184,7 @@ def main():
     # 1. Define the Experiment Path
     NUM_SAMPLES = 5
     for i in range(NUM_SAMPLES):
-        TOPOLOGY = "topology_9_prestress"
+        TOPOLOGY = "topology_14_prestress"
         AMPLITUDE = "amp=2.5"
         SAMPLE = f"sample_{i}"
         

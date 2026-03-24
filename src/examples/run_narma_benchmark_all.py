@@ -71,7 +71,7 @@ def process_single_experiment(h5_path):
         benchmark = NARMABenchmark(group_name="narma_benchmark")
         
         # Run benchmark (Standard 2nd Order NARMA as per your code)
-        score = benchmark.run(trainer, u_scaled, order=10)
+        score = benchmark.run(trainer, u_scaled, order=2)
         score.save()
         
         # print(f"   -> Metrics saved to metrics.h5")
@@ -101,7 +101,7 @@ def main():
     print("Starting Global Benchmark Run...")
     
     # 1. Locate Data Root
-    data_root = src_dir.parent / "data" / "experiment_data" / "topology_9_narma"
+    data_root = src_dir.parent / "data" / "experiment_data" / "topology_10_prestress_narma"
     
     if not data_root.exists():
         print(f"[Error] Data directory not found: {data_root}")

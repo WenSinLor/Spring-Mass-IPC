@@ -6,20 +6,24 @@ Works for any N >= 3.
 Validity rules
 --------------
   1. All perimeter edges are FIXED (the outer ring is always present).
-  2. Each inner node must keep at least 3 of its 4 springs (degree >= 3).
+  2. Each inner node must keep at least 2 active springs; if exactly 2,
+     they must be colinear: {left, right} or {up, down}.
   3. Global connectivity is automatically guaranteed by rules 1 + 2.
 
-Variable edges = the interior edges only (those not on the perimeter ring).
-At most one interior spring per inner node may be removed.
+Descriptor
+----------
+  Only average path length (L_avg) is computed.
+  Topologies are clustered by finding the 4 largest gaps between
+  consecutive sorted L_avg values and cutting there, so boundaries always
+  fall in the actual empty spaces between point clouds.  Clusters are sorted by ascending mean
+  L_avg so Cluster 1 = shortest paths, Cluster 5 = longest.
 
-Visual design
--------------
-  - All active springs in a topology panel share the same panel colour.
-  - Actuator node 0 (top-left corner)  : bright orange diamond
-  - Pinned pillars  (other 3 corners)  : red square
-  - Inner nodes     (strictly interior): dark grey circle
-  - Other perimeter nodes              : same colour as that topology's springs
-  - Removed interior springs           : dashed light grey
+Sampling strategy
+-----------------
+  "Next Sample" draws from clusters round-robin (one topology per cluster,
+  cycling when n_sample > 5), so every sample spans the full L_avg range.
+  "LHS Sample" does one strict draw (one per cluster, always 5 topologies).
+  "All" shows every valid topology.
 
 Usage
 -----
@@ -29,8 +33,8 @@ Usage
 
 Controls
 --------
-  Next Sample  —  random sample at next seed (seed increments each click)
-  LHS Sample   —  Latin Hypercube sample covering spectral-gap axis evenly
+  Next Sample  —  cluster-stratified random sample (seed increments each click)
+  LHS Sample   —  one topology per cluster (strict, always 5 results)
   All          —  display every valid topology
   Reset        —  clear all selections, reset seed counter to -1
   N slider     —  how many topologies to draw per sample
@@ -53,14 +57,15 @@ warnings.filterwarnings("ignore")
 #  COLOUR CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Functional node roles
-C_ACTUATOR = "#E8760A"   # actuator (node 0)
-C_PILLAR   = "#C0392B"   # other 3 pinned corners
-C_INNER    = "#444444"   # strictly interior nodes
+C_ACTUATOR = "#E8760A"
+C_PILLAR   = "#C0392B"
+C_INNER    = "#444444"
+C_INTER_ABSENT = "#CCCCCC"
 
-# Springs
-C_INTER_ACTIVE = "#222222"   # default; overridden by selection colour
-C_INTER_ABSENT = "#CCCCCC"   # dashed grey for removed spring
+# 5 bin colours: low L_avg (blue) → high L_avg (red)
+BIN_COLORS = ["#1565C0", "#2E7D32", "#F9A825", "#E65100", "#B71C1C"]
+BIN_LABELS = ["C1\n(shortest)", "C2", "C3", "C4",
+              "C5\n(longest)"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,24 +73,22 @@ C_INTER_ABSENT = "#CCCCCC"   # dashed grey for removed spring
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_grid(N: int) -> dict:
-    """Return a dict describing the N×N spring-mass grid topology."""
     n_nodes = N * N
     n_max   = N - 1
 
-    # Row-major edges: horizontal first, then vertical within each cell
     edges = []
     for r in range(N):
         for c in range(N):
             i = r * N + c
             if c < n_max:
-                edges.append((i, i + 1))      # →
+                edges.append((i, i + 1))
             if r < n_max:
-                edges.append((i, i + N))      # ↓
+                edges.append((i, i + N))
     edges   = np.array(edges, dtype=int)
     n_edges = len(edges)
 
-    node_pos = np.array([[c, N - 1 - r] for r in range(N) for c in range(N)],
-                    dtype=float)
+    node_pos = np.array([[c, N - 1 - r]
+                         for r in range(N) for c in range(N)], dtype=float)
 
     def on_perim(nd):
         r, c = nd // N, nd % N
@@ -93,54 +96,31 @@ def build_grid(N: int) -> dict:
 
     inner_nodes = [nd for nd in range(n_nodes) if not on_perim(nd)]
 
-    # Classify edges by perimeter / interior
     perim_edges, inter_edges = [], []
     for ei, (u, v) in enumerate(edges):
         (perim_edges if on_perim(u) and on_perim(v) else inter_edges).append(ei)
 
-    # For each inner node: map incident edge indices by direction
     inner_springs = {}
     for nd in inner_nodes:
-        r, c = divmod(nd, N)
-        nbr_to_dir = {
-            nd - 1: "left",
-            nd + 1: "right",
-            nd - N: "up",
-            nd + N: "down",
-        }
-
+        nbr_to_dir = {nd - 1: "left", nd + 1: "right",
+                      nd - N: "up",   nd + N: "down"}
         dir_map = {}
         for ei, (u, v) in enumerate(edges):
-            if u == nd:
-                other = v
-            elif v == nd:
-                other = u
-            else:
-                continue
-
-            if other in nbr_to_dir:
+            other = v if u == nd else (u if v == nd else None)
+            if other is not None and other in nbr_to_dir:
                 dir_map[nbr_to_dir[other]] = ei
-
         inner_springs[nd] = dir_map
 
-    corners   = [0, n_max, N * n_max, N * N - 1]
-    actuator  = 0
-    pillars   = corners[1:]
+    corners  = [0, n_max, N * n_max, N * N - 1]
+    actuator = 0
+    pillars  = corners[1:]
 
     return dict(
-        N=N,
-        n_nodes=n_nodes,
-        edges=edges,
-        n_edges=n_edges,
-        node_pos=node_pos,
-        inner_nodes=inner_nodes,
-        inner_springs=inner_springs,
-        perim_edges=perim_edges,
-        inter_edges=inter_edges,
-        on_perim=on_perim,
-        actuator=actuator,
-        pillars=pillars,
-        corners=corners,
+        N=N, n_nodes=n_nodes, edges=edges, n_edges=n_edges,
+        node_pos=node_pos, inner_nodes=inner_nodes,
+        inner_springs=inner_springs, perim_edges=perim_edges,
+        inter_edges=inter_edges, on_perim=on_perim,
+        actuator=actuator, pillars=pillars, corners=corners,
     )
 
 
@@ -149,53 +129,72 @@ def build_grid(N: int) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def satisfies_rules(removed_set: set, grid: dict) -> bool:
-    """
-    Validity rule for each inner node:
-      - at least 2 active incident springs must remain
-      - if exactly 2 remain, they must be colinear:
-            {left, right} or {up, down}
-      - perpendicular 2-spring cases are invalid
-    Perimeter is always intact by construction (we only remove inter edges).
-    """
     for nd, dir_map in grid["inner_springs"].items():
         active_dirs = {d for d, ei in dir_map.items() if ei not in removed_set}
         n_active = len(active_dirs)
-
         if n_active < 2:
             return False
-
         if n_active == 2:
             if active_dirs not in ({"left", "right"}, {"up", "down"}):
                 return False
-
     return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  SPECTRAL DESCRIPTORS
+#  DESCRIPTOR  (L_avg only)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def compute_descriptors(active_idx: list, grid: dict):
-    """Return (spectral_gap, lambda2, eff_rank, L_avg)."""
+def compute_lavg(active_idx: list, grid: dict) -> float:
+    """Return average shortest path length for this topology."""
     G = nx.Graph()
     G.add_nodes_from(range(grid["n_nodes"]))
     for ei in active_idx:
         G.add_edge(int(grid["edges"][ei, 0]), int(grid["edges"][ei, 1]))
+    return float(nx.average_shortest_path_length(G))
 
-    L = nx.laplacian_matrix(G).toarray().astype(float)
-    ev, V = np.linalg.eigh(L)
-    ev = np.abs(ev)
-    lam2 = float(ev[1])
-    lmax = float(ev[-1])
-    gap  = lam2 / max(lmax, 1e-12)
 
-    phi = V[grid["actuator"], 1:]     # node-0 projections on non-trivial modes
-    w   = phi ** 2
-    t   = w.sum()
-    eff = float(t**2 / (w**2).sum()) / (grid["n_nodes"] - 1) if t > 1e-12 else 0.0
+# ─────────────────────────────────────────────────────────────────────────────
+#  BIN CLASSIFICATION
+# ─────────────────────────────────────────────────────────────────────────────
 
-    L_avg = float(nx.average_shortest_path_length(G))
-    return gap, lam2, eff, L_avg
+N_BINS = 5
+
+def classify_bins(Lavgs: np.ndarray):
+    """
+    Cluster topologies by finding the N_BINS-1 largest gaps between
+    consecutive sorted L_avg values, then cutting there.
+
+    This is gap-based clustering: boundaries fall in the actual empty
+    spaces between point clouds rather than splitting dense regions the
+    way K-Means does.  Clusters are naturally ordered (0 = shortest).
+
+    Returns
+    -------
+    bins       : int array of shape (n_topos,), values in {0, ..., N_BINS-1}
+    thresholds : float array of shape (N_BINS+1,) — the cut points
+                 (midpoints of the largest gaps, plus min/max sentinels).
+    """
+    sorted_vals = np.sort(np.unique(Lavgs))
+
+    if len(sorted_vals) <= N_BINS:
+        # Degenerate case: fewer unique values than clusters
+        bins = np.searchsorted(sorted_vals, Lavgs)
+        bins = np.clip(bins, 0, N_BINS - 1)
+        thresholds = np.concatenate([[Lavgs.min()], sorted_vals, [Lavgs.max() + 1e-9]])
+        return bins, thresholds
+
+    # Gaps between consecutive unique values
+    gaps = np.diff(sorted_vals)                          # shape (n_unique-1,)
+    cut_indices = np.argsort(gaps)[-(N_BINS - 1):]       # N_BINS-1 largest gaps
+    cut_indices = np.sort(cut_indices)                   # keep left-to-right order
+
+    # Cut points sit in the middle of each gap
+    cut_points = (sorted_vals[cut_indices] + sorted_vals[cut_indices + 1]) / 2
+    thresholds = np.concatenate([[Lavgs.min()], cut_points, [Lavgs.max() + 1e-9]])
+
+    bins = np.digitize(Lavgs, thresholds) - 1
+    bins = np.clip(bins, 0, N_BINS - 1)
+    return bins, thresholds
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -208,11 +207,9 @@ def enumerate_topologies(grid: dict):
     print(f"\nEnumerating valid topologies for {N}×{N} grid …")
     print(f"  Fixed perimeter edges  : {len(grid['perim_edges'])}")
     print(f"  Variable interior edges: {len(inter)}")
-    print(f"  Inner nodes (min degree 2; if degree=2 then colinear) : {grid['inner_nodes']}")
     print()
 
-    all_active, gaps, lam2s, effs, Lavgs, n_sp, removed_list = \
-        [], [], [], [], [], [], []
+    all_active, Lavgs, n_sp, removed_list = [], [], [], []
     total = 0
 
     for n_rem in range(len(inter) + 1):
@@ -221,12 +218,10 @@ def enumerate_topologies(grid: dict):
             removed_set = set(combo)
             if not satisfies_rules(removed_set, grid):
                 continue
-            active_idx = [i for i in range(grid["n_edges"]) if i not in removed_set]
-            g, l2, er, la = compute_descriptors(active_idx, grid)
+            active_idx = [i for i in range(grid["n_edges"])
+                          if i not in removed_set]
+            la = compute_lavg(active_idx, grid)
             all_active.append(active_idx)
-            gaps.append(g)
-            lam2s.append(l2)
-            effs.append(er)
             Lavgs.append(la)
             n_sp.append(len(active_idx))
             removed_list.append(sorted(removed_set))
@@ -237,56 +232,77 @@ def enumerate_topologies(grid: dict):
         if level == 0 and n_rem > len(grid["inter_edges"]):
             break
 
-    print(f"\n  ✓  Total valid topologies: {total}\n")
-    return (
-        all_active,
-        np.array(gaps),
-        np.array(lam2s),
-        np.array(effs),
-        np.array(Lavgs),
-        np.array(n_sp),
-        removed_list,
-    )
+    Lavgs = np.array(Lavgs)
+    bins, thresholds = classify_bins(Lavgs)
+
+    print(f"\n  ✓  Total valid topologies: {total}")
+    print(f"\n  L_avg range: [{Lavgs.min():.4f}, {Lavgs.max():.4f}]")
+    print(f"  K-Means cluster boundaries: {np.round(thresholds, 4)}")
+    for b in range(N_BINS):
+        count = int((bins == b).sum())
+        print(f"    Cluster {b+1}  [{thresholds[b]:.4f}, {thresholds[b+1]:.4f})  "
+              f"→  {count} topologies")
+    print()
+
+    return all_active, Lavgs, np.array(n_sp), removed_list, bins, thresholds
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  SAMPLING
+#  SAMPLING  (bin-stratified)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def random_sample(n: int, seed: int, total: int) -> list:
+def bin_stratified_sample(n: int, seed: int, bins: np.ndarray) -> list:
+    """
+    Draw `n` topologies by cycling through bins 0→4→0→… and picking one
+    topology uniformly at random from each bin in turn.
+    Non-empty bins only; if a bin is empty it is skipped.
+    """
     rng = np.random.default_rng(seed)
-    return rng.choice(total, size=min(n, total), replace=False).tolist()
+    bin_indices = [np.where(bins == b)[0] for b in range(N_BINS)]
+    non_empty   = [b for b in range(N_BINS) if len(bin_indices[b]) > 0]
 
-
-def lhs_sample(n: int, seed: int, gaps_norm: np.ndarray) -> list:
-    """1-D Latin Hypercube along spectral-gap axis."""
-    rng   = np.random.default_rng(seed)
-    order = np.argsort(gaps_norm)
-    total = len(gaps_norm)
-    n     = min(n, total)
-    bsz   = total / n
     result = []
-    for b in range(n):
-        lo = int(b * bsz)
-        hi = min(int((b + 1) * bsz), total)
-        result.append(int(order[rng.integers(lo, max(lo + 1, hi))]))
+    cycle  = 0
+    while len(result) < n:
+        b   = non_empty[cycle % len(non_empty)]
+        idx = int(rng.choice(bin_indices[b]))
+        if idx not in result:           # avoid duplicates within small grids
+            result.append(idx)
+        cycle += 1
+        if cycle > n * N_BINS * 2:     # safety break if too many collisions
+            break
+    return result
+
+
+def lhs_bin_sample(seed: int, bins: np.ndarray) -> list:
+    """
+    Strict LHS: exactly one topology per non-empty bin, chosen at random.
+    """
+    rng = np.random.default_rng(seed)
+    result = []
+    for b in range(N_BINS):
+        idxs = np.where(bins == b)[0]
+        if len(idxs) > 0:
+            result.append(int(rng.choice(idxs)))
     return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  NODE STYLE HELPERS
+#  NODE / DRAWING HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def node_style(nd: int, grid: dict, sel_color: str):
-    """
-    Return (facecolor, marker, markersize) for a node.
+_PALETTE_HUES = np.arange(40) * 137.508
+_PALETTE = [
+    "#{:02x}{:02x}{:02x}".format(
+        int(matplotlib.cm.hsv(h / 360)[0] * 190),
+        int(matplotlib.cm.hsv(h / 360)[1] * 190),
+        int(matplotlib.cm.hsv(h / 360)[2] * 190),
+    )
+    for h in _PALETTE_HUES % 360
+]
 
-    Color logic:
-      - actuator        -> C_ACTUATOR
-      - pinned pillars  -> C_PILLAR
-      - inner nodes     -> C_INNER
-      - other perimeter nodes -> sel_color
-    """
+
+def node_style(nd: int, grid: dict, sel_color: str):
     if nd == grid["actuator"]:
         return C_ACTUATOR, "D", 12
     if nd in grid["pillars"]:
@@ -296,14 +312,9 @@ def node_style(nd: int, grid: dict, sel_color: str):
     return sel_color, "o", 10
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SINGLE-PANEL TOPOLOGY DRAWING
-# ─────────────────────────────────────────────────────────────────────────────
-
-def draw_topology(ax, active_idx: list, removed: list,
-                  grid: dict, title: str = "", sel_color: str = C_INTER_ACTIVE):
-    N       = grid["N"]
-    pos     = grid["node_pos"]
+def draw_topology(ax, active_idx, removed, grid, title="", sel_color="#222222"):
+    N   = grid["N"]
+    pos = grid["node_pos"]
     act_set = set(active_idx)
 
     ax.set_xlim(-0.65, N - 0.35)
@@ -316,90 +327,66 @@ def draw_topology(ax, active_idx: list, removed: list,
         u, v = grid["edges"][ei]
         return [pos[u], pos[v]]
 
-    # 1. Absent interior springs
     absent = [seg(ei) for ei in grid["inter_edges"] if ei not in act_set]
     if absent:
         ax.add_collection(LineCollection(
-            absent,
-            colors=C_INTER_ABSENT,
-            linewidths=1.2,
-            linestyles="dashed",
-            alpha=0.9,
-            zorder=1
-        ))
+            absent, colors=C_INTER_ABSENT, linewidths=1.2,
+            linestyles="dashed", alpha=0.9, zorder=1))
 
-    # 2. All active springs use the topology selection colour
     active_segs = [seg(ei) for ei in range(grid["n_edges"]) if ei in act_set]
     if active_segs:
         ax.add_collection(LineCollection(
-            active_segs,
-            colors=sel_color,
-            linewidths=3.0,
-            alpha=0.92,
-            zorder=2
-        ))
+            active_segs, colors=sel_color, linewidths=3.0,
+            alpha=0.92, zorder=2))
 
-    # 3. Nodes
     for nd in range(grid["n_nodes"]):
         x, y      = pos[nd]
         c, mk, ms = node_style(nd, grid, sel_color)
         ax.plot(x, y, marker=mk, color=c, markersize=ms,
                 markeredgecolor="white", markeredgewidth=1.8, zorder=5)
 
-    # 4. Removed-edge annotation
     if removed:
-        rm_pairs = [f"{grid['edges'][ei][0]}-{grid['edges'][ei][1]}" for ei in removed]
+        rm_pairs = [f"{grid['edges'][ei][0]}-{grid['edges'][ei][1]}"
+                    for ei in removed]
         ax.text((N - 1) / 2, -0.72,
                 "rm: [" + ", ".join(rm_pairs) + "]",
                 ha="center", va="top", fontsize=9,
                 color="#666666", fontfamily="monospace")
 
     if title:
-        ax.set_title(title, fontsize=10, color="#111111",
+        ax.set_title(title, fontsize=9, color="#111111",
                      pad=5, fontfamily="monospace", fontweight="bold",
                      linespacing=1.4)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  MAIN EXPLORER CLASS
+#  MAIN EXPLORER
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Selection palette: 40 distinct dark colours (readable on white)
-_PALETTE_HUES = np.arange(40) * 137.508
-_PALETTE = [
-    "#{:02x}{:02x}{:02x}".format(
-        int(matplotlib.cm.hsv(h / 360)[0] * 190),
-        int(matplotlib.cm.hsv(h / 360)[1] * 190),
-        int(matplotlib.cm.hsv(h / 360)[2] * 190),
-    )
-    for h in _PALETTE_HUES % 360
-]
-
 
 class TopologyExplorer:
 
-    def __init__(self, grid, all_active, gaps, lam2s, effs, Lavgs,
-                 n_springs, removed_list):
+    def __init__(self, grid, all_active, Lavgs, n_springs,
+                 removed_list, bins, thresholds):
         self.grid         = grid
         self.all_active   = all_active
-        self.gaps         = gaps
-        self.lam2s        = lam2s
-        self.effs         = effs
         self.Lavgs        = Lavgs
         self.n_springs    = n_springs
         self.removed_list = removed_list
-        self.N_TOPOS      = len(gaps)
+        self.bins         = bins
+        self.thresholds   = thresholds
+        self.N_TOPOS      = len(Lavgs)
 
-        g_rng = max(gaps.max() - gaps.min(), 1e-12)
-        e_rng = max(effs.max() - effs.min(), 1e-12)
-        self.gaps_norm = (gaps - gaps.min()) / g_rng
-        self.effs_norm = (effs - effs.min()) / e_rng
+        # Normalise L_avg to [0,1] for scatter x-axis
+        rng = max(Lavgs.max() - Lavgs.min(), 1e-12)
+        self.Lavgs_norm = (Lavgs - Lavgs.min()) / rng
 
         self.current_seed     = -1
         self.selected_indices = []
         self.n_sample         = min(10, self.N_TOPOS)
 
         self._build_ui()
+
+    # ── UI construction ──────────────────────────────────────────────────────
 
     def _build_ui(self):
         plt.rcParams.update({
@@ -427,8 +414,7 @@ class TopologyExplorer:
             width_ratios=[1.15, 1],
             left=0.04, right=0.98,
             top=0.93, bottom=0.12,
-            wspace=0.06,
-        )
+            wspace=0.06)
 
         left_gs = gridspec.GridSpecFromSubplotSpec(
             2, 1, subplot_spec=outer[0],
@@ -450,19 +436,20 @@ class TopologyExplorer:
 
     def _draw_header(self):
         ax = self.ax_title
-        ax.clear()
-        ax.axis("off")
+        ax.clear(); ax.axis("off")
         N = self.grid["N"]
         ax.text(0.0, 0.5,
                 f"Spring-Mass Topology Explorer  —  {N}×{N} grid",
                 transform=ax.transAxes, fontsize=16,
                 color="#111111", fontweight="bold",
                 fontfamily="monospace", va="center")
-        ax.text(0.50, 0.5,
+        lo, hi = self.Lavgs.min(), self.Lavgs.max()
+        ax.text(0.48, 0.5,
                 (f"{self.N_TOPOS} valid topologies  |  "
-                 f"perimeter fixed  |  inner degree ≥ 3  |  "
-                 f"x = spectral gap  |  y = eff rank"),
-                transform=ax.transAxes, fontsize=11,
+                 f"perimeter fixed  |  inner degree ≥ 2 (colinear if =2)  |  "
+                 f"x = avg path length  [{lo:.3f}, {hi:.3f}]  |  "
+                 f"y = gap-based cluster  (1–{N_BINS})"),
+                transform=ax.transAxes, fontsize=10,
                 color="#555555", va="center", fontfamily="monospace")
 
     def _setup_scatter(self):
@@ -470,40 +457,54 @@ class TopologyExplorer:
         ax.set_facecolor("white")
         ax.grid(True, alpha=0.35, linewidth=0.7)
 
-        n_rem = self.grid["n_edges"] - self.n_springs
-        sc = ax.scatter(
-            self.gaps_norm, self.effs_norm,
-            s=80, c=n_rem, cmap="plasma_r",
-            alpha=0.80, linewidths=0.7, edgecolors="#666666", zorder=3)
+        # Plot each topology coloured by its bin
+        for b in range(N_BINS):
+            mask = self.bins == b
+            if mask.any():
+                # Jitter y slightly so points don't all stack on integer lines
+                ys = b + np.random.default_rng(42).uniform(-0.18, 0.18,
+                                                            mask.sum())
+                ax.scatter(
+                    self.Lavgs_norm[mask], ys,
+                    s=70, color=BIN_COLORS[b], alpha=0.75,
+                    linewidths=0.5, edgecolors="#666666", zorder=3,
+                    label=f"C{b+1}  [{self.thresholds[b]:.3f}, "
+                          f"{self.thresholds[b+1]:.3f})")
 
-        cb = self.fig.colorbar(sc, ax=ax, fraction=0.024, pad=0.01)
-        cb.set_label("interior springs removed", fontsize=12, color="#111111")
-        cb.ax.tick_params(labelsize=11, colors="#333333")
+        # Bin boundary lines
+        lo, hi = self.Lavgs.min(), self.Lavgs.max()
+        rng = max(hi - lo, 1e-12)
+        for t in self.thresholds[1:-1]:
+            xn = (t - lo) / rng
+            ax.axvline(xn, color="#AAAAAA", linewidth=1.0,
+                       linestyle="--", zorder=2)
 
-        self.sel_scatter = ax.scatter(
-            [], [], s=220, zorder=10,
-            c=[], cmap="tab10", vmin=0, vmax=1,
-            edgecolors="black", linewidths=2.0)
-        self.sel_texts = []
+        # Bin labels on y-axis
+        ax.set_yticks(range(N_BINS))
+        ax.set_yticklabels([f"C{b+1}" for b in range(N_BINS)],
+                           fontsize=11)
+        ax.set_ylim(-0.55, N_BINS - 0.45)
 
-        g_min, g_max = self.gaps.min(), self.gaps.max()
-        e_min, e_max = self.effs.min(), self.effs.max()
-        xt = np.linspace(0, 1, 5)
+        # X-axis ticks in original L_avg units
+        xt = np.linspace(0, 1, 6)
         ax.set_xticks(xt)
         ax.set_xticklabels(
-            [f"{g_min + v*(g_max - g_min):.4f}" for v in xt], fontsize=11)
-        yt = np.linspace(0, 1, 5)
-        ax.set_yticks(yt)
-        ax.set_yticklabels(
-            [f"{e_min + v*(e_max - e_min):.3f}" for v in yt], fontsize=11)
+            [f"{lo + v * rng:.3f}" for v in xt], fontsize=10)
+        ax.set_xlim(-0.04, 1.04)
 
-        ax.set_xlabel("Spectral gap  ( λ₂ / λ_max )  →",
+        ax.set_xlabel("Average Path Length  ( L_avg )  →",
                       fontsize=13, color="#111111", labelpad=8)
-        ax.set_ylabel("← Effective rank  ( modal participation )",
+        ax.set_ylabel("Cluster  (gap-based, largest jumps in L_avg)",
                       fontsize=13, color="#111111", labelpad=8)
-        ax.tick_params(axis="both", labelsize=11)
-        ax.set_xlim(-0.06, 1.06)
-        ax.set_ylim(-0.06, 1.06)
+
+        ax.legend(loc="upper left", fontsize=9, facecolor="white",
+                  edgecolor="#CCCCCC", framealpha=0.95)
+
+        # Overlay scatter for selected topologies
+        self.sel_scatter = ax.scatter(
+            [], [], s=280, zorder=10,
+            facecolors="none", edgecolors="black", linewidths=2.5)
+        self.sel_texts = []
 
         self.annot = ax.annotate(
             "", xy=(0, 0), xytext=(16, 16),
@@ -523,7 +524,6 @@ class TopologyExplorer:
 
     def _setup_controls(self):
         y, h = 0.028, 0.058
-
         pos = dict(
             next  = [0.040, y, 0.115, h],
             lhs   = [0.162, y, 0.115, h],
@@ -532,7 +532,6 @@ class TopologyExplorer:
             sld   = [0.435, y + 0.010, 0.135, h - 0.018],
             seed  = [0.578, y, 0.150, h],
         )
-
         kw = dict(color="white", hovercolor="#F0F0F0")
         self.ax_next  = self.fig.add_axes(pos["next"])
         self.ax_lhs   = self.fig.add_axes(pos["lhs"])
@@ -546,20 +545,18 @@ class TopologyExplorer:
         self.btn_all   = Button(self.ax_all,   "⊠  All",         **kw)
         self.btn_reset = Button(self.ax_reset, "↺  Reset",       **kw)
 
-        btn_styles = [
+        for btn, col, wt in [
             (self.btn_next,  "#0D47A1", "bold"),
             (self.btn_lhs,   "#1B5E20", "bold"),
             (self.btn_all,   "#4A148C", "bold"),
             (self.btn_reset, "#444444", "normal"),
-        ]
-        for btn, col, wt in btn_styles:
+        ]:
             btn.label.set_color(col)
             btn.label.set_fontsize(13)
             btn.label.set_fontfamily("monospace")
             btn.label.set_fontweight(wt)
             for sp in btn.ax.spines.values():
-                sp.set_edgecolor("#AAAAAA")
-                sp.set_linewidth(1.2)
+                sp.set_edgecolor("#AAAAAA"); sp.set_linewidth(1.2)
 
         self.slider = Slider(
             self.ax_sld, "N", 1, min(40, self.N_TOPOS),
@@ -574,8 +571,7 @@ class TopologyExplorer:
         self.ax_seed.axis("off")
         self.ax_seed.set_facecolor("#F7F7F7")
         for sp in self.ax_seed.spines.values():
-            sp.set_visible(True)
-            sp.set_edgecolor("#AAAAAA")
+            sp.set_visible(True); sp.set_edgecolor("#AAAAAA")
             sp.set_linewidth(1.5)
         self.seed_label = self.ax_seed.text(
             0.5, 0.52, "Seed:  —",
@@ -590,6 +586,8 @@ class TopologyExplorer:
         self.btn_reset.on_clicked(self._on_reset)
         self.slider.on_changed(lambda v: setattr(self, "n_sample", int(v)))
 
+    # ── Right panel ──────────────────────────────────────────────────────────
+
     def _render_right_panel(self):
         for ax in self.topo_axes:
             self.fig.delaxes(ax)
@@ -599,37 +597,44 @@ class TopologyExplorer:
 
         if n == 0:
             ax = self.fig.add_subplot(self.right_spec)
-            ax.set_facecolor("white")
-            ax.axis("off")
+            ax.set_facecolor("white"); ax.axis("off")
             ax.text(0.5, 0.62,
                     "Click  ▶ Next Sample\n"
-                    "or  ⊞ LHS Sample\n"
+                    "or  ⊞ LHS Sample  (one per bin)\n"
                     "or  ⊠ All",
                     ha="center", va="center", transform=ax.transAxes,
                     fontsize=15, color="#333333",
                     fontfamily="monospace", linespacing=2.2)
 
+            # Legend
             leg_items = [
                 plt.Line2D([0], [0], marker="D", color="w",
                            markerfacecolor=C_ACTUATOR, markersize=13,
-                           label="Actuator  (node 0, x-direction only)"),
+                           label="Actuator  (node 0)"),
                 plt.Line2D([0], [0], marker="s", color="w",
                            markerfacecolor=C_PILLAR, markersize=13,
                            label="Pinned pillar  (3 far corners)"),
                 plt.Line2D([0], [0], marker="o", color="w",
                            markerfacecolor=C_INNER, markersize=12,
-                           label="Inner node  (degree ≥ 3)"),
+                           label="Inner node  (degree ≥ 2, colinear if =2)"),
                 plt.Line2D([0], [0], color="#555555", linewidth=4,
-                           label="Active spring  (panel colour)"),
+                           label="Active spring  (panel colour = bin colour)"),
                 plt.Line2D([0], [0], color=C_INTER_ABSENT, linewidth=2,
-                           linestyle="dashed",
-                           label="Removed interior spring"),
+                           linestyle="dashed", label="Removed interior spring"),
             ]
+            for b in range(N_BINS):
+                lo = self.thresholds[b]; hi = self.thresholds[b + 1]
+                count = int((self.bins == b).sum())
+                leg_items.append(
+                    plt.Line2D([0], [0], marker="o", color="w",
+                               markerfacecolor=BIN_COLORS[b], markersize=11,
+                               label=(f"C{b+1}  [{lo:.3f}, {hi:.3f})  "
+                                      f"({count} topos)")))
             ax.legend(handles=leg_items, loc="lower center",
-                      fontsize=12, facecolor="white",
+                      fontsize=11, facecolor="white",
                       edgecolor="#CCCCCC", labelcolor="#111111",
-                      framealpha=1.0, bbox_to_anchor=(0.5, 0.02),
-                      borderpad=1.0, labelspacing=0.8)
+                      framealpha=1.0, bbox_to_anchor=(0.5, 0.01),
+                      borderpad=1.0, labelspacing=0.75)
             self.topo_axes = [ax]
             self.fig.canvas.draw_idle()
             return
@@ -638,7 +643,7 @@ class TopologyExplorer:
         rows = int(np.ceil(n / cols))
         gs   = gridspec.GridSpecFromSubplotSpec(
             rows, cols, subplot_spec=self.right_spec,
-            hspace=0.55, wspace=0.10)
+            hspace=0.60, wspace=0.10)
 
         for pos_i, topo_idx in enumerate(self.selected_indices):
             r, c = divmod(pos_i, cols)
@@ -648,19 +653,21 @@ class TopologyExplorer:
 
             active  = self.all_active[topo_idx]
             removed = self.removed_list[topo_idx]
-            color   = _PALETTE[pos_i % len(_PALETTE)]
-            ns      = self.n_springs[topo_idx]
-            n_r     = self.grid["n_edges"] - ns
+            b       = int(self.bins[topo_idx])
+            color   = BIN_COLORS[b]          # colour = bin, not palette index
 
-            title = (f"#{pos_i+1}   {ns}/{self.grid['n_edges']} springs"
-                     f"  ({n_r} removed)\n"
-                     f"gap={self.gaps[topo_idx]:.4f}   "
-                     f"λ₂={self.lam2s[topo_idx]:.3f}   "
-                     f"eff={self.effs[topo_idx]:.3f}")
+            ns  = self.n_springs[topo_idx]
+            n_r = self.grid["n_edges"] - ns
+
+            title = (f"#{pos_i+1}  C{b+1}  ({ns}/{self.grid['n_edges']} springs,"
+                     f" {n_r} removed)\n"
+                     f"L_avg = {self.Lavgs[topo_idx]:.4f}")
             draw_topology(ax, active, removed, self.grid,
                           title=title, sel_color=color)
 
         self.fig.canvas.draw_idle()
+
+    # ── Scatter overlay ───────────────────────────────────────────────────────
 
     def _update_scatter(self):
         for t in self.sel_texts:
@@ -668,16 +675,16 @@ class TopologyExplorer:
         self.sel_texts = []
 
         if self.selected_indices:
-            xs   = self.gaps_norm[self.selected_indices]
-            ys   = self.effs_norm[self.selected_indices]
-            hues = np.linspace(0, 0.9, len(self.selected_indices))
+            xs = self.Lavgs_norm[self.selected_indices]
+            # y = bin index (with small jitter for visibility)
+            ys = np.array([self.bins[i] for i in self.selected_indices],
+                          dtype=float)
             self.sel_scatter.set_offsets(np.column_stack([xs, ys]))
-            self.sel_scatter.set_array(hues)
-            self.sel_scatter.set_sizes([220] * len(self.selected_indices))
+            self.sel_scatter.set_sizes([280] * len(self.selected_indices))
             for i, (x, y) in enumerate(zip(xs, ys)):
-                col = _PALETTE[i % len(_PALETTE)]
+                col = BIN_COLORS[int(self.bins[self.selected_indices[i]])]
                 t   = self.ax_scatter.text(
-                    x, y + 0.032, str(i + 1),
+                    x, y + 0.22, str(i + 1),
                     ha="center", va="bottom", fontsize=11,
                     color=col, fontweight="bold",
                     fontfamily="monospace", zorder=15)
@@ -693,17 +700,18 @@ class TopologyExplorer:
         self.seed_label.set_text(f"Seed:  {seed_str}")
         self.fig.canvas.draw_idle()
 
+    # ── Button callbacks ──────────────────────────────────────────────────────
+
     def _on_next(self, _):
         self.current_seed = max(0, self.current_seed + 1)
-        self.selected_indices = random_sample(
-            int(self.slider.val), self.current_seed, self.N_TOPOS)
+        self.selected_indices = bin_stratified_sample(
+            int(self.slider.val), self.current_seed, self.bins)
         self._update_scatter()
         self._render_right_panel()
 
     def _on_lhs(self, _):
         self.current_seed = max(0, self.current_seed + 1)
-        self.selected_indices = lhs_sample(
-            int(self.slider.val), self.current_seed, self.gaps_norm)
+        self.selected_indices = lhs_bin_sample(self.current_seed, self.bins)
         self._update_scatter()
         self._render_right_panel()
 
@@ -718,6 +726,8 @@ class TopologyExplorer:
         self._update_scatter()
         self._render_right_panel()
 
+    # ── Hover tooltip ─────────────────────────────────────────────────────────
+
     def _on_hover(self, event):
         if event.inaxes != self.ax_scatter:
             self.annot.set_visible(False)
@@ -726,27 +736,27 @@ class TopologyExplorer:
         x, y = event.xdata, event.ydata
         if x is None:
             return
-        d2  = (self.gaps_norm - x) ** 2 + (self.effs_norm - y) ** 2
+
+        # Distance in normalised x + bin-y space
+        ys_all = self.bins.astype(float)
+        d2 = (self.Lavgs_norm - x) ** 2 + (ys_all - y) ** 2
         idx = int(np.argmin(d2))
-        xlim = self.ax_scatter.get_xlim()
-        ylim = self.ax_scatter.get_ylim()
-        thr  = ((xlim[1] - xlim[0]) * 0.04) ** 2 + \
-               ((ylim[1] - ylim[0]) * 0.04) ** 2
+        thr = 0.06 ** 2 + 0.5 ** 2      # generous tolerance in mixed units
         if d2[idx] > thr:
             self.annot.set_visible(False)
             self.fig.canvas.draw_idle()
             return
 
         rem = self.removed_list[idx]
+        b   = int(self.bins[idx])
         txt = (f"id        {idx}\n"
-               f"gap       {self.gaps[idx]:.5f}\n"
-               f"λ₂        {self.lam2s[idx]:.4f}\n"
-               f"eff rank  {self.effs[idx]:.4f}\n"
                f"L_avg     {self.Lavgs[idx]:.4f}\n"
+               f"Cluster   {b+1}  [{self.thresholds[b]:.3f}, "
+               f"{self.thresholds[b+1]:.3f})\n"
                f"springs   {self.n_springs[idx]}/{self.grid['n_edges']}\n"
                f"removed   {rem if rem else 'none'}")
         self.annot.set_text(txt)
-        self.annot.xy = (self.gaps_norm[idx], self.effs_norm[idx])
+        self.annot.xy = (self.Lavgs_norm[idx], float(b))
         self.annot.set_visible(True)
         self.fig.canvas.draw_idle()
 
@@ -764,12 +774,13 @@ def main():
     args = parser.parse_args()
 
     if args.N < 3:
-        print("Error: N must be ≥ 3")
-        return
+        print("Error: N must be ≥ 3"); return
 
     grid = build_grid(args.N)
-    data = enumerate_topologies(grid)
-    TopologyExplorer(grid, *data)
+    all_active, Lavgs, n_springs, removed_list, bins, thresholds = \
+        enumerate_topologies(grid)
+    TopologyExplorer(grid, all_active, Lavgs, n_springs,
+                     removed_list, bins, thresholds)
 
 
 if __name__ == "__main__":
