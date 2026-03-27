@@ -196,7 +196,7 @@ def main():
     print("Starting script: Slice and Organize Experiment Samples.")
     
     current_script_dir = Path(__file__).parent.resolve()
-    EXPERIMENT_DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_14_prestress"
+    EXPERIMENT_DATA_DIR = current_script_dir.parent.parent / "data" / "experiment_data" / "topology_15_prestress"
     
     if not EXPERIMENT_DATA_DIR.exists():
         print(f"[Error] Directory not found: {EXPERIMENT_DATA_DIR}")
