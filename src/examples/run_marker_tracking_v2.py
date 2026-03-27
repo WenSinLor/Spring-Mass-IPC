@@ -50,7 +50,7 @@ HSV_PARAMS = dict(
 DETECTION_PARAMS = dict(
     min_area=9000,
     max_area=25000,
-    circularity=0.1,
+    circularity=0.01,
 )
 
 # --- Tracker parameters (passed as tracker_params) ---
@@ -489,7 +489,11 @@ def _process_trial(video_file, output_file, reference):
 
                 # Always emit a row; inactive markers fall back to reference.
                 centroids   = tracker.get_centroids_ordered()
-                frame_block = [[cx, cy, 0] for (cx, cy) in centroids]
+                frame_block = []
+                for m in tracker.markers:
+                    cx, cy = m.centroid
+                    valid = 1 if m.was_measured else 0
+                    frame_block.append([cx, cy, valid])
                 raw_trajectory_data.append(frame_block)
                 valid_frames_count += 1
 
