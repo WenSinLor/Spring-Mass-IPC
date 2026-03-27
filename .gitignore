@@ -22,4 +22,7 @@ data/experiment_data/topology_7/
 data/experiment_data/topology_7_narma/
 data/experiment_data/topology_8/
 data/experiment_data/topology_8_narma/
+data/experiment_data/topology_9/
+data/experiment_data/topology_9_narma/
+**metrics/
 **__pycache__/

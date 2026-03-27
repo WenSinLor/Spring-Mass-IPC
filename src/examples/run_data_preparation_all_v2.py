@@ -54,12 +54,12 @@ HSV_PARAMS = dict(
 DETECTION_PARAMS = dict(
     min_area=9000,
     max_area=25000,
-    circularity=0.1,
+    circularity=0.01,
 )
 
 # --- Tracker parameters ---
 TRACKER_PARAMS = dict(
-    max_dist=180,
+    max_dist=350,
     max_lost=15,
 )
 
@@ -166,8 +166,8 @@ VIDEO_FPS = 30000.0 / 1001.0   # fallback FPS if cap.get() returns 0
 #         'M6': (2172.7, 860.2),
 #         'M4': (1217.4, 870.4),
 #         'M5': (1701.3, 885.2),
-#         'M11': (2170.7, 1337.3),
-#         'M10': (2672.5, 1343.5),
+#         'M10': (2170.7, 1337.3),
+#         'M11': (2672.5, 1343.5),
 #         'M9': (1690.2, 1354.4),
 #         'M8': (1207.2, 1379.4),
 #         'M14': (2187.9, 1821.4),
@@ -486,7 +486,11 @@ def _process_pair(video_path: Path, sensor_filename: str, output_folder: Path):
 
                 # Always emit a row; inactive markers fall back to reference.
                 centroids   = tracker.get_centroids_ordered()
-                frame_block = [[cx, cy, 0] for (cx, cy) in centroids]
+                frame_block = []
+                for m in tracker.markers:
+                    cx, cy = m.centroid
+                    valid = 1 if getattr(m, "was_measured", True) else 0
+                    frame_block.append([cx, cy, valid])
                 raw_trajectories.append(frame_block)
                 frame_indices.append(frame_idx)
 
