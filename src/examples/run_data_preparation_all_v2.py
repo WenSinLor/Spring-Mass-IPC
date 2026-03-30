@@ -36,9 +36,9 @@ GRID_COLS = 4
 # --- Paths ---
 current_script_dir  = Path(__file__).parent.resolve()
 DATA_DIR            = current_script_dir.parent.parent / "data"
-CAMERA_DATA_DIR     = DATA_DIR / "camera_data"     / "topology_15_prestress"
-SENSOR_DATA_DIR     = DATA_DIR / "vibrometer_data" / "topology_15_prestress"
-EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_15_prestress"
+CAMERA_DATA_DIR     = DATA_DIR / "camera_data"     / "topology_9_prestress"
+SENSOR_DATA_DIR     = DATA_DIR / "vibrometer_data" / "topology_9_prestress"
+EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_9_prestress"
 
 # --- HSV thresholds ---
 HSV_PARAMS = dict(
@@ -131,28 +131,28 @@ VIDEO_FPS = 30000.0 / 1001.0   # fallback FPS if cap.get() returns 0
 # }
 
 # --- Topology 9 Prestress ---
-# REFERENCE_LAYOUTS = {
+REFERENCE_LAYOUTS = {
 
-#     "topology_9": {
-#         'M3': (2652.9, 264.6),
-#         'M0': (1115.0, 317.0),
-#         'M2': (2142.8, 323.4),
-#         'M1': (1642.9, 360.5),
-#         'M7': (2623.2, 798.1),
-#         'M6': (2130.0, 805.0),
-#         'M4': (1155.6, 849.5),
-#         'M5': (1658.5, 850.6),
-#         'M11': (2637.7, 1335.2),
-#         'M10': (2140.9, 1361.6),
-#         'M9': (1642.8, 1362.1),
-#         'M8': (1159.1, 1368.5),
-#         'M13': (1640.6, 1837.2),
-#         'M14': (2155.0, 1843.0),
-#         'M15': (2714.9, 1885.7),
-#         'M12': (1103.5, 1906.3),
-#     },
+    "topology_9": {
+        'M3': (2652.9, 264.6),
+        'M0': (1115.0, 317.0),
+        'M2': (2142.8, 323.4),
+        'M1': (1642.9, 360.5),
+        'M7': (2623.2, 798.1),
+        'M6': (2130.0, 805.0),
+        'M4': (1155.6, 849.5),
+        'M5': (1658.5, 850.6),
+        'M11': (2637.7, 1335.2),
+        'M10': (2140.9, 1361.6),
+        'M9': (1642.8, 1362.1),
+        'M8': (1159.1, 1368.5),
+        'M13': (1640.6, 1837.2),
+        'M14': (2155.0, 1843.0),
+        'M15': (2714.9, 1885.7),
+        'M12': (1103.5, 1906.3),
+    },
 
-# }
+}
 
 # --- Topology 10 Prestress ---
 # REFERENCE_LAYOUTS = {
@@ -299,28 +299,28 @@ VIDEO_FPS = 30000.0 / 1001.0   # fallback FPS if cap.get() returns 0
 # }
 
 # --- Topology 15 Prestress ---
-REFERENCE_LAYOUTS = {
+# REFERENCE_LAYOUTS = {
 
-    "topology_15": {
-        'M3': (2709.2, 289.3),
-        'M0': (1181.6, 321.8),
-        'M2': (2209.2, 405.0),
-        'M1': (1700.0, 420.2),
-        'M7': (2750.4, 818.7),
-        'M4': (1173.7, 860.8),
-        'M6': (2234.4, 879.9),
-        'M5': (1687.4, 897.4),
-        'M10': (2236.7, 1346.4),
-        'M9': (1684.5, 1349.9),
-        'M11': (2755.4, 1353.1),
-        'M8': (1159.5, 1377.4),
-        'M14': (2201.4, 1822.7),
-        'M13': (1691.5, 1833.1),
-        'M15': (2764.3, 1914.4),
-        'M12': (1149.2, 1932.4),
-    },
+#     "topology_15": {
+#         'M3': (2709.2, 289.3),
+#         'M0': (1181.6, 321.8),
+#         'M2': (2209.2, 405.0),
+#         'M1': (1700.0, 420.2),
+#         'M7': (2750.4, 818.7),
+#         'M4': (1173.7, 860.8),
+#         'M6': (2234.4, 879.9),
+#         'M5': (1687.4, 897.4),
+#         'M10': (2236.7, 1346.4),
+#         'M9': (1684.5, 1349.9),
+#         'M11': (2755.4, 1353.1),
+#         'M8': (1159.5, 1377.4),
+#         'M14': (2201.4, 1822.7),
+#         'M13': (1691.5, 1833.1),
+#         'M15': (2764.3, 1914.4),
+#         'M12': (1149.2, 1932.4),
+#     },
 
-}
+# }
 
 # --- Topology 16 Prestress ---
 # REFERENCE_LAYOUTS = {

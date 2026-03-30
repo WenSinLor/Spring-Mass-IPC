@@ -48,7 +48,7 @@ HSV_PARAMS = dict(
 
 # --- Detection filters (passed as detection_params) ---
 DETECTION_PARAMS = dict(
-    min_area=9000,
+    min_area=5000,
     max_area=25000,
     circularity=0.01,
 )
