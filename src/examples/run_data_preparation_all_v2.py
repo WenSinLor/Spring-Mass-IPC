@@ -36,9 +36,9 @@ GRID_COLS = 4
 # --- Paths ---
 current_script_dir  = Path(__file__).parent.resolve()
 DATA_DIR            = current_script_dir.parent.parent / "data"
-CAMERA_DATA_DIR     = DATA_DIR / "camera_data"     / "topology_9_prestress"
-SENSOR_DATA_DIR     = DATA_DIR / "vibrometer_data" / "topology_9_prestress"
-EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_9_prestress"
+CAMERA_DATA_DIR     = DATA_DIR / "camera_data"     / "topology_17_prestress"
+SENSOR_DATA_DIR     = DATA_DIR / "vibrometer_data" / "topology_17_prestress"
+EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_17_prestress"
 
 # --- HSV thresholds ---
 HSV_PARAMS = dict(
@@ -52,8 +52,8 @@ HSV_PARAMS = dict(
 
 # --- Detection filters ---
 DETECTION_PARAMS = dict(
-    min_area=9000,
-    max_area=25000,
+    min_area=5000,
+    max_area=35000,
     circularity=0.01,
 )
 
@@ -130,29 +130,29 @@ VIDEO_FPS = 30000.0 / 1001.0   # fallback FPS if cap.get() returns 0
 
 # }
 
-# --- Topology 9 Prestress ---
-REFERENCE_LAYOUTS = {
+# # --- Topology 9 Prestress ---
+# REFERENCE_LAYOUTS = {
 
-    "topology_9": {
-        'M3': (2652.9, 264.6),
-        'M0': (1115.0, 317.0),
-        'M2': (2142.8, 323.4),
-        'M1': (1642.9, 360.5),
-        'M7': (2623.2, 798.1),
-        'M6': (2130.0, 805.0),
-        'M4': (1155.6, 849.5),
-        'M5': (1658.5, 850.6),
-        'M11': (2637.7, 1335.2),
-        'M10': (2140.9, 1361.6),
-        'M9': (1642.8, 1362.1),
-        'M8': (1159.1, 1368.5),
-        'M13': (1640.6, 1837.2),
-        'M14': (2155.0, 1843.0),
-        'M15': (2714.9, 1885.7),
-        'M12': (1103.5, 1906.3),
-    },
+#     "topology_9": {
+#         'M3': (2652.9, 264.6),
+#         'M0': (1115.0, 317.0),
+#         'M2': (2142.8, 323.4),
+#         'M1': (1642.9, 360.5),
+#         'M7': (2623.2, 798.1),
+#         'M6': (2130.0, 805.0),
+#         'M4': (1155.6, 849.5),
+#         'M5': (1658.5, 850.6),
+#         'M11': (2637.7, 1335.2),
+#         'M10': (2140.9, 1361.6),
+#         'M9': (1642.8, 1362.1),
+#         'M8': (1159.1, 1368.5),
+#         'M13': (1640.6, 1837.2),
+#         'M14': (2155.0, 1843.0),
+#         'M15': (2714.9, 1885.7),
+#         'M12': (1103.5, 1906.3),
+#     },
 
-}
+# }
 
 # --- Topology 10 Prestress ---
 # REFERENCE_LAYOUTS = {
@@ -345,6 +345,30 @@ REFERENCE_LAYOUTS = {
 #     },
 
 # }
+
+# --- Topology 17 Prestress ---
+REFERENCE_LAYOUTS = {
+
+    "topology_17": {
+        'M3': (2871.6, 172.1),
+        'M0': (1037.2, 175.4),
+        'M1': (1672.0, 274.1),
+        'M2': (2249.5, 285.6),
+        'M7': (2796.8, 820.2),
+        'M4': (1134.3, 820.8),
+        'M6': (2221.8, 833.1),
+        'M5': (1699.3, 843.2),
+        'M8': (1119.8, 1366.2),
+        'M11': (2817.1, 1367.2),
+        'M9': (1687.6, 1367.8),
+        'M10': (2227.4, 1369.9),
+        'M13': (1691.5, 1925.6),
+        'M14': (2249.9, 1935.2),
+        'M15': (2918.9, 2016.1),
+        'M12': (1012.3, 2019.2),
+    },
+
+}
 
 # Maps video filename stems (or substrings) to a layout key.
 # If a video filename does not match any entry, "default" is used.

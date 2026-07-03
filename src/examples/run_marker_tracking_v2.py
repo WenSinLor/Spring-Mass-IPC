@@ -29,8 +29,8 @@ from processing.tracking_v2 import RobustGridTracker, VideoLoader, _morph_kernel
 # --- Paths ---
 current_script_dir = Path(__file__).parent.resolve()
 DATA_DIR    = current_script_dir.parent.parent / "data"
-VIDEO_FILE  = DATA_DIR / "camera_data"     / "topology_10_prestress" / "C1425.MP4"
-OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_10_prestress" / "spring_mass_data.npz"
+VIDEO_FILE  = DATA_DIR / "camera_data"     / "topology_17_prestress" / "C1562.MP4"
+OUTPUT_FILE = DATA_DIR / "experiment_data" / "topology_17_prestress" / "spring_mass_data.npz"
 
 # --- Grid ---
 GRID_ROWS = 4
@@ -49,7 +49,7 @@ HSV_PARAMS = dict(
 # --- Detection filters (passed as detection_params) ---
 DETECTION_PARAMS = dict(
     min_area=5000,
-    max_area=25000,
+    max_area=35000,
     circularity=0.01,
 )
 
@@ -156,28 +156,28 @@ VIDEO_FPS    = 30000.0 / 1001.0   # fallback if cap.get() returns 0
 # }
 
 # --- Topology 10 Prestress ---
-REFERENCE_LAYOUTS = {
+# REFERENCE_LAYOUTS = {
 
-    "topology_10": {
-        'M3': (2683.9, 272.4),
-        'M0': (1177.9, 328.4),
-        'M2': (2186.3, 371.1),
-        'M1': (1698.6, 394.7),
-        'M7': (2658.0, 812.4),
-        'M6': (2172.7, 860.2),
-        'M4': (1217.4, 870.4),
-        'M5': (1701.3, 885.2),
-        'M10': (2170.7, 1337.3),
-        'M11': (2672.5, 1343.5),
-        'M9': (1690.2, 1354.4),
-        'M8': (1207.2, 1379.4),
-        'M14': (2187.9, 1821.4),
-        'M13': (1673.0, 1832.5),
-        'M15': (2748.0, 1895.3),
-        'M12': (1135.2, 1917.1),
-    },
+#     "topology_10": {
+#         'M3': (2683.9, 272.4),
+#         'M0': (1177.9, 328.4),
+#         'M2': (2186.3, 371.1),
+#         'M1': (1698.6, 394.7),
+#         'M7': (2658.0, 812.4),
+#         'M6': (2172.7, 860.2),
+#         'M4': (1217.4, 870.4),
+#         'M5': (1701.3, 885.2),
+#         'M10': (2170.7, 1337.3),
+#         'M11': (2672.5, 1343.5),
+#         'M9': (1690.2, 1354.4),
+#         'M8': (1207.2, 1379.4),
+#         'M14': (2187.9, 1821.4),
+#         'M13': (1673.0, 1832.5),
+#         'M15': (2748.0, 1895.3),
+#         'M12': (1135.2, 1917.1),
+#     },
 
-}
+# }
 
 # --- Topology 10 Prestress Narma ---
 # REFERENCE_LAYOUTS = {
@@ -347,10 +347,34 @@ REFERENCE_LAYOUTS = {
 
 # }
 
+# --- Topology 17 Prestress ---
+REFERENCE_LAYOUTS = {
+
+    "topology_17": {
+        'M3': (2871.6, 172.1),
+        'M0': (1037.2, 175.4),
+        'M1': (1672.0, 274.1),
+        'M2': (2249.5, 285.6),
+        'M7': (2796.8, 820.2),
+        'M4': (1134.3, 820.8),
+        'M6': (2221.8, 833.1),
+        'M5': (1699.3, 843.2),
+        'M8': (1119.8, 1366.2),
+        'M11': (2817.1, 1367.2),
+        'M9': (1687.6, 1367.8),
+        'M10': (2227.4, 1369.9),
+        'M13': (1691.5, 1925.6),
+        'M14': (2249.9, 1935.2),
+        'M15': (2918.9, 2016.1),
+        'M12': (1012.3, 2019.2),
+    },
+
+}
+
 # Each tuple: (layout_key, video_file, output_npz)
 # Add one entry per trial / angle you want to process.
 TRIAL_BATCHES = [
-    ("topology_10", VIDEO_FILE, OUTPUT_FILE),
+    ("topology_17", VIDEO_FILE, OUTPUT_FILE),
 ]
 
 # ═══════════════════════════════════════════════════════════════
