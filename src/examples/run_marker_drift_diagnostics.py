@@ -11,8 +11,8 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import matplotlib.pyplot as plt
 
 
-DEFAULT_TOPOLOGY = "topology_17_prestress"
-DEFAULT_AMPLITUDE = "amp=1"
+DEFAULT_TOPOLOGY = "topology_15_prestress"
+DEFAULT_AMPLITUDE = "amp=2.5"
 DEFAULT_NODES = [3, 12, 15]
 DEFAULT_WASHOUT_S = 5.0
 DEFAULT_TRAIN_S = 10.0

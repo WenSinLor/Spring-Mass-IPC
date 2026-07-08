@@ -1,0 +1,4 @@
+topology,amplitude,sample,hidden_node,reference_node,horizon_steps,H_cut,D_cut,basis_index,basis_term,total_degree,max_readout_time_delay,max_target_time_delay,max_lag_frames,coefficient_x,coefficient_y,exponents
+topology_10_prestress,amp=2.5,sample_4,10,0,5,1,1,-1,intercept,0,,,,991.172607421875,1007.8516235351562,
+topology_10_prestress,amp=2.5,sample_4,10,0,5,1,1,0,P1(u[target-6]),1,1,6,1,-55.39729309082031,18.974777221679688,0 1
+topology_10_prestress,amp=2.5,sample_4,10,0,5,1,1,1,P1(u[target-5]),1,0,5,0,167.55853271484375,-35.67100524902344,1 0

@@ -3,12 +3,10 @@ import csv
 import json
 import os
 import sys
-import warnings
 from pathlib import Path
 
 import h5py
 import numpy as np
-from scipy.linalg import LinAlgWarning
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -25,30 +23,23 @@ from openprc.reservoir.io.state_loader import StateLoader
 
 
 DEFAULT_TOPOLOGY = "topology_17_prestress"
-DEFAULT_AMPLITUDE = "amp=1"
+DEFAULT_TOPOLOGY_FORMAT = "topology_{i}_prestress"
+DEFAULT_AMPLITUDE = "auto"
 DEFAULT_HIDDEN_NODE = 10
 DEFAULT_REFERENCE_NODE = 0
 DEFAULT_HORIZON_STEPS = 5
 DEFAULT_WASHOUT_S = 5.0
 DEFAULT_TRAIN_S = 10.0
-DEFAULT_TEST_S = 10.0
-DEFAULT_Q_MIN = 0
-DEFAULT_Q_MAX = 10
+DEFAULT_VALIDATION_S = 10.0
+DEFAULT_H_MIN = 0
+DEFAULT_H_MAX = 30
 DEFAULT_D_VALUES = [1, 2]
-DEFAULT_D3_TRIGGER_NMSE = 0.25
 DEFAULT_LAG_STRIDE_FRAMES = 1
-DEFAULT_CV_BLOCKS = 4
-ALPHA_GRID = [1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e0]
+DEFAULT_RIDGE_ALPHA = 1e-6
+DEFAULT_TOLERANCE_FRAC = 0.05
+DEFAULT_CONDITION_THRESHOLD = 1e12
 
-PALETTE = {
-    "degree1": "#88CCEE",
-    "degree2": "#44AA99",
-    "degree3": "#CC6677",
-    "train": "#6B7280",
-    "validation": "#D55E00",
-    "grid": "#E5E7EB",
-    "text": "#1F2937",
-}
+PALETTE = ["#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00", "#56B4E9"]
 
 
 def configure_matplotlib():
@@ -57,7 +48,7 @@ def configure_matplotlib():
             "font.family": "sans-serif",
             "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
             "pdf.fonttype": 42,
-            "font.size": 7,
+            "font.size": 8,
             "axes.spines.right": False,
             "axes.spines.top": False,
             "axes.linewidth": 0.8,
@@ -71,81 +62,214 @@ def configure_matplotlib():
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "Select extra input-history depth Q and polynomial degree D for a hidden-node "
-            "target using blocked CV on Legendre bases of the measured actuator input."
+            "PDF-style hidden-node input-history basis calibration. The script fits "
+            "Legendre input-history models on the train window and selects H,D by "
+            "validation-window NMSE. It can calibrate one topology or a chosen "
+            "topology family on one common dictionary."
         )
     )
-    parser.add_argument("--topology", default=DEFAULT_TOPOLOGY)
-    parser.add_argument("--amplitude", default=DEFAULT_AMPLITUDE)
     parser.add_argument(
-        "--sample",
-        default="all",
-        help="Sample name such as sample_0, or 'all' for every sample_* directory.",
+        "--topology",
+        default=None,
+        help="Single topology name. Kept for convenience; equivalent to --topologies.",
+    )
+    parser.add_argument(
+        "--topologies",
+        nargs="+",
+        default=None,
+        help="Topology names or numeric indices, e.g. topology_17_prestress or 17.",
+    )
+    parser.add_argument("--topology-start", type=int, default=None)
+    parser.add_argument("--topology-stop", type=int, default=None)
+    parser.add_argument("--topology-name-format", default=DEFAULT_TOPOLOGY_FORMAT)
+    parser.add_argument(
+        "--amplitude",
+        default=DEFAULT_AMPLITUDE,
+        help="'auto' chooses an available amp folder per topology; otherwise use e.g. amp=2.5.",
+    )
+    parser.add_argument(
+        "--topology-amplitude",
+        action="append",
+        default=[],
+        metavar="TOPOLOGY:AMP",
+        help="Override amplitude for one topology, e.g. topology_17_prestress:amp=1.",
+    )
+    parser.add_argument("--sample", default="all")
+    parser.add_argument(
+        "--exclude-sample",
+        action="append",
+        default=[],
+        metavar="TOPOLOGY:SAMPLE",
+        help="Exclude one sample, e.g. topology_17_prestress:sample_1. Can repeat.",
     )
     parser.add_argument("--hidden-node", type=int, default=DEFAULT_HIDDEN_NODE)
     parser.add_argument("--reference-node", type=int, default=DEFAULT_REFERENCE_NODE)
     parser.add_argument("--horizon-steps", type=int, default=DEFAULT_HORIZON_STEPS)
     parser.add_argument("--washout", type=float, default=DEFAULT_WASHOUT_S)
+    parser.add_argument("--train", type=float, default=DEFAULT_TRAIN_S)
+    parser.add_argument("--validation", type=float, default=DEFAULT_VALIDATION_S)
+    parser.add_argument("--H-min", type=int, default=DEFAULT_H_MIN)
+    parser.add_argument("--H-max", type=int, default=DEFAULT_H_MAX)
+    parser.add_argument("--Q-min", type=int, dest="H_min", help=argparse.SUPPRESS)
+    parser.add_argument("--Q-max", type=int, dest="H_max", help=argparse.SUPPRESS)
+    parser.add_argument("--D-values", type=int, nargs="+", default=DEFAULT_D_VALUES)
+    parser.add_argument("--lag-stride-frames", type=int, default=DEFAULT_LAG_STRIDE_FRAMES)
+    parser.add_argument("--ridge-alpha", type=float, default=DEFAULT_RIDGE_ALPHA)
     parser.add_argument(
-        "--train",
+        "--tolerance-frac",
         type=float,
-        default=DEFAULT_TRAIN_S,
-        help="Original train duration; combined with --test to define the basis-selection window.",
+        default=DEFAULT_TOLERANCE_FRAC,
+        help="Choose the simplest candidate within this fraction of the best validation NMSE.",
     )
     parser.add_argument(
-        "--test",
+        "--condition-threshold",
         type=float,
-        default=DEFAULT_TEST_S,
-        help="Original test duration; combined with --train to define the basis-selection window.",
+        default=DEFAULT_CONDITION_THRESHOLD,
+        help="Prefer candidates below this condition number when possible.",
     )
-    parser.add_argument("--Q-min", type=int, default=DEFAULT_Q_MIN)
-    parser.add_argument("--Q-max", type=int, default=DEFAULT_Q_MAX)
-    parser.add_argument("--H-min", type=int, dest="Q_min", help=argparse.SUPPRESS)
-    parser.add_argument("--H-max", type=int, dest="Q_max", help=argparse.SUPPRESS)
-    parser.add_argument(
-        "--D-values",
-        type=int,
-        nargs="+",
-        default=DEFAULT_D_VALUES,
-        help="Main polynomial degrees to scan over the full Q range.",
-    )
-    parser.add_argument(
-        "--D3-trigger-nmse",
-        type=float,
-        default=DEFAULT_D3_TRIGGER_NMSE,
-        help="Run optional D=3 search if the best D=2 CV NMSE_2D is above this value.",
-    )
-    parser.add_argument(
-        "--lag-stride-frames",
-        type=int,
-        default=DEFAULT_LAG_STRIDE_FRAMES,
-        help="Lag stride K: history is [u_m, u_{m-K}, u_{m-2K}, ...].",
-    )
-    parser.add_argument(
-        "--cv-blocks",
-        type=int,
-        default=DEFAULT_CV_BLOCKS,
-        help="Number of contiguous leave-one-block-out CV folds.",
-    )
+    parser.add_argument("--output-dir", default=None)
     return parser.parse_args()
 
 
-def find_sample_dirs(base_dir: Path, sample_arg: str):
-    if sample_arg != "all":
-        sample_dir = base_dir / sample_arg
-        if not (sample_dir / "experiment.h5").exists():
-            raise FileNotFoundError(f"Experiment file not found: {sample_dir / 'experiment.h5'}")
-        return [sample_dir]
+def data_root():
+    return src_dir.parent / "data" / "experiment_data"
 
-    sample_dirs = sorted(
-        p for p in base_dir.glob("sample_*") if p.is_dir() and (p / "experiment.h5").exists()
+
+def parse_key_value_pairs(values):
+    out = {}
+    for value in values:
+        if ":" not in value:
+            raise ValueError(f"Expected TOPOLOGY:VALUE format, got '{value}'.")
+        key, val = [part.strip() for part in value.split(":", 1)]
+        if not key or not val:
+            raise ValueError(f"Expected TOPOLOGY:VALUE format, got '{value}'.")
+        out[key] = val
+    return out
+
+
+def parse_exclusions(values, name_format):
+    excluded = {}
+    for value in values:
+        if ":" not in value:
+            raise ValueError(f"Expected TOPOLOGY:SAMPLE format, got '{value}'.")
+        topology, sample = [part.strip() for part in value.split(":", 1)]
+        if not topology or not sample:
+            raise ValueError(f"Expected TOPOLOGY:SAMPLE format, got '{value}'.")
+        topology = topology_name_from_arg(topology, name_format)
+        excluded.setdefault(topology, set()).add(sample)
+    return excluded
+
+
+def topology_name_from_arg(value, name_format):
+    text = str(value)
+    if text.isdigit():
+        return name_format.format(i=int(text))
+    return text
+
+
+def selected_topologies(args):
+    if args.topologies:
+        return [topology_name_from_arg(v, args.topology_name_format) for v in args.topologies]
+    if args.topology is not None:
+        return [topology_name_from_arg(args.topology, args.topology_name_format)]
+    if args.topology_start is not None or args.topology_stop is not None:
+        if args.topology_start is None or args.topology_stop is None:
+            raise ValueError("Use both --topology-start and --topology-stop.")
+        return [
+            args.topology_name_format.format(i=i)
+            for i in range(args.topology_start, args.topology_stop + 1)
+        ]
+    return [DEFAULT_TOPOLOGY]
+
+
+def choose_amplitude_dir(topology_dir, amplitude):
+    if amplitude != "auto":
+        amp_dir = topology_dir / amplitude
+        if not amp_dir.exists():
+            return None
+        return amp_dir
+    amp_dirs = sorted(
+        p
+        for p in topology_dir.glob("amp=*")
+        if p.is_dir() and any((s / "experiment.h5").exists() for s in p.glob("sample_*"))
     )
-    if not sample_dirs:
-        raise FileNotFoundError(f"No sample_*/experiment.h5 files found under {base_dir}")
-    return sample_dirs
+    if not amp_dirs:
+        return None
+    for preferred in ("amp=1", "amp=2.5"):
+        for amp_dir in amp_dirs:
+            if amp_dir.name == preferred:
+                return amp_dir
+    return amp_dirs[-1]
 
 
-def load_positions(h5_path: Path):
+def find_sample_dirs(amp_dir, sample_arg, topology, excluded_samples):
+    if sample_arg != "all":
+        sample_dir = amp_dir / sample_arg
+        samples = [sample_dir] if (sample_dir / "experiment.h5").exists() else []
+    else:
+        samples = sorted(
+            p for p in amp_dir.glob("sample_*") if p.is_dir() and (p / "experiment.h5").exists()
+        )
+    excluded = excluded_samples.get(topology, set())
+    return [sample_dir for sample_dir in samples if sample_dir.name not in excluded]
+
+
+def discover_records(args):
+    root = data_root()
+    overrides = parse_key_value_pairs(args.topology_amplitude)
+    excluded_samples = parse_exclusions(args.exclude_sample, args.topology_name_format)
+    records = []
+    skipped = []
+    for topology in selected_topologies(args):
+        topology_dir = root / topology
+        if not topology_dir.exists():
+            skipped.append(
+                {
+                    "topology": topology,
+                    "amplitude": "",
+                    "sample": "",
+                    "reason": "topology folder not found",
+                }
+            )
+            continue
+        amplitude = overrides.get(topology, args.amplitude)
+        amp_dir = choose_amplitude_dir(topology_dir, amplitude)
+        if amp_dir is None:
+            skipped.append(
+                {
+                    "topology": topology,
+                    "amplitude": amplitude,
+                    "sample": "",
+                    "reason": "amplitude folder not found or has no samples",
+                }
+            )
+            continue
+        sample_dirs = find_sample_dirs(amp_dir, args.sample, topology, excluded_samples)
+        if not sample_dirs:
+            skipped.append(
+                {
+                    "topology": topology,
+                    "amplitude": amp_dir.name,
+                    "sample": args.sample,
+                    "reason": "no included samples",
+                }
+            )
+            continue
+        for sample_dir in sample_dirs:
+            records.append(
+                {
+                    "topology": topology,
+                    "amplitude": amp_dir.name,
+                    "sample": sample_dir.name,
+                    "sample_dir": sample_dir,
+                }
+            )
+    if not records:
+        raise FileNotFoundError("No topology/sample records were found for the requested selection.")
+    return records, skipped, excluded_samples
+
+
+def load_positions(h5_path):
     with h5py.File(h5_path, "r") as f:
         time = f["time_series/time"][:]
         positions = f["time_series/nodes/positions"][:, :, :2]
@@ -162,11 +286,12 @@ def normalize_to_unit_interval(u):
 
 
 def legendre_normalized(n, x):
+    x = np.asarray(x, dtype=float)
     if n == 0:
-        return np.ones_like(x, dtype=float)
+        return np.ones_like(x)
     if n == 1:
         return np.sqrt(3.0) * x
-    p_nm2 = np.ones_like(x, dtype=float)
+    p_nm2 = np.ones_like(x)
     p_nm1 = x
     for k in range(1, n):
         p_n = ((2 * k + 1) * x * p_nm1 - k * p_nm2) / (k + 1)
@@ -192,11 +317,39 @@ def exponent_vectors(num_lags, max_degree):
     return np.asarray(exps, dtype=np.int16)
 
 
-def target_delay_set_frames(extra_history_depth, horizon_steps, lag_stride_frames):
-    return [horizon_steps + q * lag_stride_frames for q in range(extra_history_depth + 1)]
+def build_legendre_design(u_norm, H, D, lag_stride_frames):
+    num_lags = H + 1
+    exps = exponent_vectors(num_lags, D)
+    n_rows = len(u_norm)
+    design = np.empty((n_rows, len(exps)), dtype=np.float32)
+
+    values_by_degree = {
+        degree: legendre_normalized(degree, u_norm).astype(np.float32)
+        for degree in range(D + 1)
+    }
+    lagged_values = {}
+    for degree in range(D + 1):
+        lagged = np.empty((n_rows, num_lags), dtype=np.float32)
+        lagged[:, :] = np.nan
+        source = values_by_degree[degree]
+        for q in range(num_lags):
+            lag = q * lag_stride_frames
+            if lag == 0:
+                lagged[:, q] = source
+            else:
+                lagged[lag:, q] = source[:-lag]
+        lagged_values[degree] = lagged
+
+    for col, exp_vec in enumerate(exps):
+        term = np.ones(n_rows, dtype=np.float32)
+        for q, degree in enumerate(exp_vec):
+            if degree > 0:
+                term *= lagged_values[int(degree)][:, q]
+        design[:, col] = term
+    return design, exps
 
 
-def basis_term_name(exp_vec, horizon_steps, lag_stride_frames):
+def term_name(exp_vec, horizon_steps, lag_stride_frames):
     parts = []
     for q, degree in enumerate(exp_vec):
         if degree > 0:
@@ -205,40 +358,13 @@ def basis_term_name(exp_vec, horizon_steps, lag_stride_frames):
     return " * ".join(parts)
 
 
-def build_legendre_design(u_norm, Q_extra, D, lag_stride_frames):
-    num_lags = Q_extra + 1
-    exps = exponent_vectors(num_lags, D)
-    n_rows = len(u_norm)
-    design = np.empty((n_rows, len(exps)), dtype=np.float32)
-
-    values_by_degree = {
-        degree: legendre_normalized(degree, u_norm) for degree in range(D + 1)
-    }
-
-    lagged_values = {}
-    for degree in range(D + 1):
-        lagged = np.empty((n_rows, num_lags), dtype=np.float32)
-        lagged[:, :] = np.nan
-        source = values_by_degree[degree]
-        for lag_index in range(num_lags):
-            frame_lag = lag_index * lag_stride_frames
-            if frame_lag == 0:
-                lagged[:, lag_index] = source
-            else:
-                lagged[frame_lag:, lag_index] = source[:-frame_lag]
-        lagged_values[degree] = lagged
-
-    for col, exp_vec in enumerate(exps):
-        term = np.ones(n_rows, dtype=np.float32)
-        for lag_index, degree in enumerate(exp_vec):
-            if degree > 0:
-                term *= lagged_values[int(degree)][:, lag_index]
-        design[:, col] = term
-
-    return design, exps
+def target_time_delays(H, horizon_steps, lag_stride_frames):
+    return [horizon_steps + q * lag_stride_frames for q in range(H + 1)]
 
 
 def nmse_components(y_true, y_pred):
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
     err = y_true - y_pred
     centered = y_true - np.mean(y_true, axis=0, keepdims=True)
     sse = np.sum(err**2, axis=0)
@@ -248,782 +374,666 @@ def nmse_components(y_true, y_pred):
     return float(nmse_xy[0]), float(nmse_xy[1]), nmse_2d
 
 
-def fit_ridge(P_train, y_train, alpha):
-    model = Ridge(alpha=alpha, fit_intercept=True)
-    model.fit(P_train, y_train)
-    return model
+def fit_centered_ridge(P_train, Y_train, alpha):
+    p_mean = np.mean(P_train, axis=0, keepdims=True)
+    y_mean = np.mean(Y_train, axis=0, keepdims=True)
+    model = Ridge(alpha=alpha, fit_intercept=False)
+    model.fit(P_train - p_mean, Y_train - y_mean)
+    return model, p_mean, y_mean
 
 
-def make_cv_folds(n_rows, num_blocks):
-    indices = np.arange(n_rows)
-    blocks = np.array_split(indices, num_blocks)
-    folds = []
-    for block in blocks:
-        if len(block) == 0:
-            continue
-        train_idx = np.setdiff1d(indices, block, assume_unique=True)
-        folds.append((train_idx, block))
-    if len(folds) < 2:
-        raise ValueError("Not enough rows for blocked cross-validation.")
-    return folds
+def predict_centered(model, p_mean, y_mean, P):
+    return model.predict(P - p_mean) + y_mean
 
 
-def cv_evaluate(P, y, number_of_terms, num_blocks):
-    folds = make_cv_folds(len(P), num_blocks)
-    min_train_rows = min(len(train_idx) for train_idx, _ in folds)
-    if number_of_terms > 0.5 * min_train_rows:
-        return {
-            "status": "too_many_terms",
-            "min_cv_train_rows": int(min_train_rows),
-            "number_of_terms": int(number_of_terms),
-        }
-
-    alpha_scores = []
-    for alpha in ALPHA_GRID:
-        fold_scores = []
-        for train_idx, val_idx in folds:
-            model = fit_ridge(P[train_idx], y[train_idx], alpha)
-            pred_val = model.predict(P[val_idx])
-            _, _, val_nmse_2d = nmse_components(y[val_idx], pred_val)
-            fold_scores.append(val_nmse_2d)
-        alpha_scores.append((float(np.mean(fold_scores)), alpha))
-    selected_alpha = min(alpha_scores, key=lambda item: item[0])[1]
-
-    fold_records = []
-    for fold_id, (train_idx, val_idx) in enumerate(folds):
-        model = fit_ridge(P[train_idx], y[train_idx], selected_alpha)
-        pred_train = model.predict(P[train_idx])
-        pred_val = model.predict(P[val_idx])
-        train_nmse_x, train_nmse_y, train_nmse_2d = nmse_components(y[train_idx], pred_train)
-        val_nmse_x, val_nmse_y, val_nmse_2d = nmse_components(y[val_idx], pred_val)
-        fold_records.append(
-            {
-                "fold": fold_id,
-                "train_nmse_x": train_nmse_x,
-                "val_nmse_x": val_nmse_x,
-                "train_nmse_y": train_nmse_y,
-                "val_nmse_y": val_nmse_y,
-                "train_nmse_2d": train_nmse_2d,
-                "val_nmse_2d": val_nmse_2d,
-            }
-        )
-
-    out = {
-        "status": "ok",
-        "selected_alpha": selected_alpha,
-        "min_cv_train_rows": int(min_train_rows),
-    }
-    for key in (
-        "train_nmse_x",
-        "val_nmse_x",
-        "train_nmse_y",
-        "val_nmse_y",
-        "train_nmse_2d",
-        "val_nmse_2d",
-    ):
-        values = np.asarray([r[key] for r in fold_records], dtype=float)
-        out[f"{key}_mean"] = float(np.mean(values))
-        out[f"{key}_std"] = float(np.std(values, ddof=0))
-    out["train_val_gap_2d"] = out["val_nmse_2d_mean"] - out["train_nmse_2d_mean"]
-    return out
-
-
-def frame_windows(loader, washout_s, train_s, test_s):
-    washout_frames = int(washout_s / loader.dt)
-    selection_frames = int((train_s + test_s) / loader.dt)
-    window_start = washout_frames
-    window_stop = window_start + selection_frames
-    if window_stop > loader.total_frames:
+def frame_windows(loader, args):
+    washout_frames = int(args.washout / loader.dt)
+    train_frames = int(args.train / loader.dt)
+    validation_frames = int(args.validation / loader.dt)
+    train_start = washout_frames
+    train_stop = train_start + train_frames
+    validation_stop = train_stop + validation_frames
+    if validation_stop + args.horizon_steps > loader.total_frames:
         raise ValueError(
-            f"Need {window_stop} frames for washout + basis-selection window, "
-            f"but only {loader.total_frames} frames are available."
+            f"Need target frame {validation_stop + args.horizon_steps}, "
+            f"but sample has only {loader.total_frames} frames."
         )
-    return window_start, window_stop
+    return train_start, train_stop, validation_stop
 
 
-def candidate_pairs(args, include_degree3=False):
-    if args.Q_min < 0 or args.Q_max < args.Q_min:
-        raise ValueError("Require 0 <= Q_min <= Q_max.")
-    d_values = sorted(set(int(d) for d in args.D_values))
-    if include_degree3 and 3 not in d_values:
-        d_values.append(3)
-    return [(Q_extra, D) for D in d_values for Q_extra in range(args.Q_min, args.Q_max + 1)]
+def valid_rows(start, stop, H, lag_stride_frames):
+    valid_start = max(start, H * lag_stride_frames)
+    if valid_start >= stop:
+        return np.asarray([], dtype=int)
+    return np.arange(valid_start, stop)
 
 
-def evaluate_sample(sample_dir, args, pairs):
-    h5_path = sample_dir / "experiment.h5"
-    loader = StateLoader(h5_path)
-    time, positions = load_positions(h5_path)
+def design_condition_number(P_train_centered, ridge_alpha):
+    gram = P_train_centered.T @ P_train_centered
+    if ridge_alpha > 0:
+        gram = gram + ridge_alpha * np.eye(gram.shape[0])
+    try:
+        return float(np.linalg.cond(gram))
+    except np.linalg.LinAlgError:
+        return float("inf")
+
+
+def evaluate_candidate(record, args, H, D):
+    sample_dir = record["sample_dir"]
+    loader = StateLoader(sample_dir / "experiment.h5")
+    _, positions = load_positions(sample_dir / "experiment.h5")
     n_nodes = positions.shape[1]
-
     if args.hidden_node >= n_nodes:
-        raise ValueError(f"Hidden node {args.hidden_node} is outside node range 0..{n_nodes - 1}.")
+        raise ValueError(
+            f"{record['topology']}/{record['sample']}: hidden node {args.hidden_node} "
+            f"is outside node range 0..{n_nodes - 1}."
+        )
     if args.hidden_node == args.reference_node:
-        raise ValueError("The hidden node cannot also be the reference node.")
-    if args.lag_stride_frames < 1:
-        raise ValueError("--lag-stride-frames must be at least 1.")
+        raise ValueError("Hidden node cannot also be the reference node.")
 
     u_norm = normalize_to_unit_interval(loader.get_actuation_signal(actuator_idx=0, dof=0))
     hidden_relative = positions[:, args.hidden_node, :] - positions[:, args.reference_node, :]
+    train_start, train_stop, validation_stop = frame_windows(loader, args)
+    design, exps = build_legendre_design(u_norm, H, D, args.lag_stride_frames)
 
-    window_start, window_stop = frame_windows(loader, args.washout, args.train, args.test)
-    if window_stop + args.horizon_steps > loader.total_frames:
-        raise ValueError(
-            f"Horizon requires target frame {window_stop + args.horizon_steps}, "
-            f"but sample has {loader.total_frames} frames."
-        )
+    train_rows = valid_rows(train_start, train_stop, H, args.lag_stride_frames)
+    val_rows = valid_rows(train_stop, validation_stop, H, args.lag_stride_frames)
+    if len(train_rows) == 0 or len(val_rows) == 0:
+        raise ValueError(f"No valid train/validation rows for H={H}, D={D}.")
+    P_train = design[train_rows]
+    P_val = design[val_rows]
+    Y_train = hidden_relative[train_rows + args.horizon_steps]
+    Y_val = hidden_relative[val_rows + args.horizon_steps]
+    if np.isnan(P_train).any() or np.isnan(P_val).any():
+        raise ValueError(f"NaNs remained in design matrix for H={H}, D={D}.")
 
-    records = []
-    design_cache = {}
-    for Q_extra, D in pairs:
-        max_lag_frames = Q_extra * args.lag_stride_frames
-        valid_start = window_start + max_lag_frames
-        valid_stop = window_stop
-        if valid_start >= valid_stop:
-            raise ValueError(
-                f"No valid rows for Q={Q_extra}, lag stride={args.lag_stride_frames}; "
-                "reduce Q or lag stride."
-            )
-
-        design, exps = build_legendre_design(u_norm, Q_extra, D, args.lag_stride_frames)
-        row_idx = np.arange(valid_start, valid_stop)
-        P = design[row_idx]
-        y = hidden_relative[row_idx + args.horizon_steps]
-        if np.isnan(P).any():
-            raise ValueError(f"NaNs remained in design matrix for Q={Q_extra}, D={D}.")
-
-        cv = cv_evaluate(P, y, design.shape[1], args.cv_blocks)
-        delay_set = target_delay_set_frames(Q_extra, args.horizon_steps, args.lag_stride_frames)
-        record = {
-            "sample": sample_dir.name,
-            "Q_extra": Q_extra,
-            "D": D,
-            "horizon_steps": args.horizon_steps,
-            "lag_stride_frames": args.lag_stride_frames,
-            "target_delay_frames_min": min(delay_set),
-            "target_delay_frames_max": max(delay_set),
-            "target_delay_set_frames": str(delay_set),
-            "max_lag_frames": max_lag_frames,
-            "number_of_terms": int(design.shape[1]),
-            "status": cv["status"],
-            "selected_alpha": cv.get("selected_alpha", np.nan),
-            "min_cv_train_rows": cv["min_cv_train_rows"],
-            "window_rows": int(len(P)),
-            "terms_per_min_cv_train_row": float(design.shape[1] / max(cv["min_cv_train_rows"], 1)),
-            "train_nmse_x_mean": cv.get("train_nmse_x_mean", np.nan),
-            "train_nmse_x_std": cv.get("train_nmse_x_std", np.nan),
-            "val_nmse_x_mean": cv.get("val_nmse_x_mean", np.nan),
-            "val_nmse_x_std": cv.get("val_nmse_x_std", np.nan),
-            "train_nmse_y_mean": cv.get("train_nmse_y_mean", np.nan),
-            "train_nmse_y_std": cv.get("train_nmse_y_std", np.nan),
-            "val_nmse_y_mean": cv.get("val_nmse_y_mean", np.nan),
-            "val_nmse_y_std": cv.get("val_nmse_y_std", np.nan),
-            "train_nmse_2d_mean": cv.get("train_nmse_2d_mean", np.nan),
-            "train_nmse_2d_std": cv.get("train_nmse_2d_std", np.nan),
-            "val_nmse_2d_mean": cv.get("val_nmse_2d_mean", np.nan),
-            "val_nmse_2d_std": cv.get("val_nmse_2d_std", np.nan),
-            "train_val_gap_2d": cv.get("train_val_gap_2d", np.nan),
-        }
-        records.append(record)
-        design_cache[(Q_extra, D)] = {
-            "P": P,
-            "y": y,
-            "exps": exps,
-            "time": time[row_idx],
-            "row_idx": row_idx,
-        }
-
-    return records, design_cache
+    model, p_mean, y_mean = fit_centered_ridge(P_train, Y_train, args.ridge_alpha)
+    train_pred = predict_centered(model, p_mean, y_mean, P_train)
+    val_pred = predict_centered(model, p_mean, y_mean, P_val)
+    train_x, train_y, train_2d = nmse_components(Y_train, train_pred)
+    val_x, val_y, val_2d = nmse_components(Y_val, val_pred)
+    condition_number = design_condition_number(P_train - p_mean, args.ridge_alpha)
+    number_of_terms = int(design.shape[1])
+    overparameterized = number_of_terms > 0.8 * len(train_rows)
+    ill_conditioned = condition_number > args.condition_threshold
+    return {
+        "topology": record["topology"],
+        "amplitude": record["amplitude"],
+        "sample": record["sample"],
+        "H": H,
+        "D": D,
+        "horizon_steps": args.horizon_steps,
+        "lag_stride_frames": args.lag_stride_frames,
+        "readout_time_delays": str(list(range(H + 1))),
+        "target_time_delays": str(target_time_delays(H, args.horizon_steps, args.lag_stride_frames)),
+        "number_of_terms": number_of_terms,
+        "num_train_rows": int(len(train_rows)),
+        "num_validation_rows": int(len(val_rows)),
+        "terms_per_train_row": float(number_of_terms / max(len(train_rows), 1)),
+        "condition_number": condition_number,
+        "overparameterized": overparameterized,
+        "ill_conditioned": ill_conditioned,
+        "condition_warning": "ill_conditioned" if ill_conditioned else "",
+        "train_nmse_x": train_x,
+        "train_nmse_y": train_y,
+        "train_nmse_2d": train_2d,
+        "validation_nmse_x": val_x,
+        "validation_nmse_y": val_y,
+        "validation_nmse_2d": val_2d,
+        "train_validation_gap_2d": val_2d - train_2d,
+    }
 
 
-def aggregate_records(records, pairs):
-    keys = [
-        "number_of_terms",
-        "selected_alpha",
-        "min_cv_train_rows",
-        "window_rows",
-        "terms_per_min_cv_train_row",
-        "train_nmse_x_mean",
-        "val_nmse_x_mean",
-        "train_nmse_y_mean",
-        "val_nmse_y_mean",
-        "train_nmse_2d_mean",
-        "val_nmse_2d_mean",
-        "train_val_gap_2d",
-    ]
+def candidate_pairs(args):
+    if args.H_min < 0 or args.H_max < args.H_min:
+        raise ValueError("Require 0 <= H-min <= H-max.")
+    if args.lag_stride_frames < 1:
+        raise ValueError("--lag-stride-frames must be at least 1.")
+    return [(H, D) for D in sorted(set(args.D_values)) for H in range(args.H_min, args.H_max + 1)]
+
+
+def summarize_candidates(rows):
     summary = []
-    for Q_extra, D in pairs:
-        group = [r for r in records if r["Q_extra"] == Q_extra and r["D"] == D]
-        if not group:
-            continue
-        ok_group = [r for r in group if r["status"] == "ok"]
-        delay_set = target_delay_set_frames(
-            Q_extra,
-            int(group[0]["horizon_steps"]),
-            int(group[0]["lag_stride_frames"]),
-        )
+    for D in sorted({int(r["D"]) for r in rows}):
+        for H in sorted({int(r["H"]) for r in rows if int(r["D"]) == D}):
+            group = [r for r in rows if int(r["H"]) == H and int(r["D"]) == D]
+            row = {
+                "H": H,
+                "D": D,
+                "horizon_steps": int(group[0]["horizon_steps"]),
+                "lag_stride_frames": int(group[0]["lag_stride_frames"]),
+                "readout_time_delays": str(list(range(H + 1))),
+                "target_time_delays": str(
+                    target_time_delays(
+                        H,
+                        int(group[0]["horizon_steps"]),
+                        int(group[0]["lag_stride_frames"]),
+                    )
+                ),
+                "number_of_terms": int(group[0]["number_of_terms"]),
+                "num_topology_sample_pairs": len(group),
+                "overparameterized_fraction": float(
+                    np.mean([bool(r["overparameterized"]) for r in group])
+                ),
+                "ill_conditioned_fraction": float(
+                    np.mean([bool(r["ill_conditioned"]) for r in group])
+                ),
+            }
+            for key in (
+                "num_train_rows",
+                "num_validation_rows",
+                "terms_per_train_row",
+                "condition_number",
+                "train_nmse_x",
+                "train_nmse_y",
+                "train_nmse_2d",
+                "validation_nmse_x",
+                "validation_nmse_y",
+                "validation_nmse_2d",
+                "train_validation_gap_2d",
+            ):
+                values = np.asarray([float(r[key]) for r in group], dtype=float)
+                row[f"{key}_mean"] = float(np.nanmean(values))
+                row[f"{key}_std"] = float(np.nanstd(values, ddof=0))
+            summary.append(row)
+    return summary
+
+
+def summarize_by_topology(rows):
+    summary = []
+    keys = sorted({(r["topology"], int(r["H"]), int(r["D"])) for r in rows})
+    for topology, H, D in keys:
+        group = [r for r in rows if r["topology"] == topology and int(r["H"]) == H and int(r["D"]) == D]
         row = {
-            "Q_extra": Q_extra,
+            "topology": topology,
+            "amplitude": group[0]["amplitude"],
+            "H": H,
             "D": D,
-            "horizon_steps": int(group[0]["horizon_steps"]),
-            "lag_stride_frames": int(group[0]["lag_stride_frames"]),
-            "target_delay_frames_min": min(delay_set),
-            "target_delay_frames_max": max(delay_set),
-            "target_delay_set_frames": str(delay_set),
+            "num_samples": len(group),
+            "number_of_terms": int(group[0]["number_of_terms"]),
+            "target_time_delays": group[0]["target_time_delays"],
         }
-        row["status"] = "ok" if len(ok_group) == len(group) else "too_many_terms"
-        for key in keys:
-            values = np.asarray([r[key] for r in ok_group], dtype=float)
-            if len(values) == 0:
-                row[key] = np.nan
-                row[f"{key}_std_across_samples"] = np.nan
-            else:
-                row[key] = float(np.nanmean(values))
-                row[f"{key}_std_across_samples"] = float(np.nanstd(values, ddof=0))
-        val_std_values = np.asarray([r["val_nmse_2d_std"] for r in ok_group], dtype=float)
-        row["val_nmse_2d_cv_std_mean"] = (
-            float(np.nanmean(val_std_values)) if len(val_std_values) else np.nan
-        )
-        row["num_samples"] = len(group)
-        row["num_ok_samples"] = len(ok_group)
+        for key in ("train_nmse_2d", "validation_nmse_2d", "condition_number"):
+            values = np.asarray([float(r[key]) for r in group], dtype=float)
+            row[f"{key}_mean"] = float(np.nanmean(values))
+            row[f"{key}_std"] = float(np.nanstd(values, ddof=0))
         summary.append(row)
     return summary
 
 
-def write_csv(rows, out_path):
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(rows[0].keys())
-    with out_path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+def choose_common_cutoff(summary, tolerance_frac):
+    valid = [r for r in summary if np.isfinite(r["validation_nmse_2d_mean"])]
+    if not valid:
+        raise ValueError("No valid H,D candidates.")
+    best = min(valid, key=lambda r: r["validation_nmse_2d_mean"])
+    tolerance = (1.0 + tolerance_frac) * best["validation_nmse_2d_mean"]
+    eligible = [r for r in valid if r["validation_nmse_2d_mean"] <= tolerance]
+    non_ill = [r for r in eligible if r["ill_conditioned_fraction"] == 0.0]
+    if non_ill:
+        eligible = non_ill
+    non_over = [r for r in eligible if r["overparameterized_fraction"] == 0.0]
+    if non_over:
+        eligible = non_over
+    selected = min(eligible, key=lambda r: (int(r["D"]), int(r["H"]), int(r["number_of_terms"])))
+    return selected, best, tolerance
 
 
-def basis_label(nmse):
-    if nmse < 0.10:
+def basis_label(validation_nmse_2d):
+    if validation_nmse_2d < 0.10:
         return "strong"
-    if nmse < 0.20:
+    if validation_nmse_2d < 0.20:
         return "acceptable"
-    if nmse < 0.35:
+    if validation_nmse_2d < 0.35:
         return "partial"
     return "weak"
 
 
-def choose_recommendation(summary):
-    valid = [r for r in summary if r["status"] == "ok" and np.isfinite(r["val_nmse_2d_mean"])]
-    if not valid:
-        raise ValueError("No valid candidate satisfies the term-count constraint.")
-    global_best = min(valid, key=lambda r: r["val_nmse_2d_mean"])
-    tolerance = 1.05 * global_best["val_nmse_2d_mean"]
-    eligible = [
-        r
-        for r in valid
-        if r["val_nmse_2d_mean"] <= tolerance
-        and r["train_val_gap_2d"] < max(0.10, 0.5 * r["val_nmse_2d_mean"])
-    ]
-    if not eligible:
-        eligible = [r for r in valid if r["val_nmse_2d_mean"] <= tolerance]
-    recommended = min(eligible, key=lambda r: (r["D"], r["Q_extra"], r["number_of_terms"]))
-
-    larger = [
-        r
-        for r in valid
-        if (r["D"] > recommended["D"] or r["Q_extra"] > recommended["Q_extra"])
-    ]
-    if larger:
-        best_larger = min(larger, key=lambda r: r["val_nmse_2d_mean"])
-        relative_gain = (
-            recommended["val_nmse_2d_mean"] - best_larger["val_nmse_2d_mean"]
-        ) / max(recommended["val_nmse_2d_mean"], np.finfo(float).eps)
-    else:
-        best_larger = None
-        relative_gain = 0.0
-    return recommended, global_best, best_larger, float(relative_gain)
+def selected_design(record, args, H, D):
+    sample_dir = record["sample_dir"]
+    loader = StateLoader(sample_dir / "experiment.h5")
+    _, positions = load_positions(sample_dir / "experiment.h5")
+    u_norm = normalize_to_unit_interval(loader.get_actuation_signal(actuator_idx=0, dof=0))
+    hidden_relative = positions[:, args.hidden_node, :] - positions[:, args.reference_node, :]
+    train_start, train_stop, validation_stop = frame_windows(loader, args)
+    rows = valid_rows(train_start, validation_stop, H, args.lag_stride_frames)
+    design, exps = build_legendre_design(u_norm, H, D, args.lag_stride_frames)
+    P = design[rows]
+    Y = hidden_relative[rows + args.horizon_steps]
+    return P, Y, exps
 
 
-def selected_sample_designs(sample_dirs, args, selected_pair):
-    designs = []
-    for sample_dir in sample_dirs:
-        records, cache = evaluate_sample(sample_dir, args, [selected_pair])
-        record = records[0]
-        if record["status"] != "ok":
-            raise ValueError(f"Selected basis is invalid for {sample_dir.name}.")
-        designs.append((sample_dir.name, record, cache[selected_pair]))
-    return designs
-
-
-def refit_selected_basis(sample_designs, selected, out_dir, hidden_node, horizon_steps, lag_stride_frames):
-    coefficient_rows = []
-    task_weight_rows = []
-    reliability_rows = []
-    Q_extra = int(selected["Q_extra"])
+def selected_validation_trace(record, args, selected):
+    H = int(selected["H"])
     D = int(selected["D"])
-    delay_set = target_delay_set_frames(Q_extra, horizon_steps, lag_stride_frames)
+    sample_dir = record["sample_dir"]
+    loader = StateLoader(sample_dir / "experiment.h5")
+    time, positions = load_positions(sample_dir / "experiment.h5")
+    u_norm = normalize_to_unit_interval(loader.get_actuation_signal(actuator_idx=0, dof=0))
+    hidden_relative = positions[:, args.hidden_node, :] - positions[:, args.reference_node, :]
+    train_start, train_stop, validation_stop = frame_windows(loader, args)
+    design, _ = build_legendre_design(u_norm, H, D, args.lag_stride_frames)
 
-    for sample_name, record, design_info in sample_designs:
-        alpha = record["selected_alpha"]
-        model = fit_ridge(design_info["P"], design_info["y"], alpha)
-        pred = model.predict(design_info["P"])
-        nmse_x, nmse_y, nmse_2d = nmse_components(design_info["y"], pred)
-        y_centered = design_info["y"] - np.mean(design_info["y"], axis=0, keepdims=True)
+    train_rows = valid_rows(train_start, train_stop, H, args.lag_stride_frames)
+    val_rows = valid_rows(train_stop, validation_stop, H, args.lag_stride_frames)
+    P_train = design[train_rows]
+    P_val = design[val_rows]
+    Y_train = hidden_relative[train_rows + args.horizon_steps]
+    Y_val = hidden_relative[val_rows + args.horizon_steps]
+    model, p_mean, y_mean = fit_centered_ridge(P_train, Y_train, args.ridge_alpha)
+    Y_pred = predict_centered(model, p_mean, y_mean, P_val)
+    nmse_x, nmse_y, nmse_2d = nmse_components(Y_val, Y_pred)
+    target_time = time[val_rows + args.horizon_steps]
+    target_time = target_time - target_time[0]
+    return {
+        "topology": record["topology"],
+        "amplitude": record["amplitude"],
+        "sample": record["sample"],
+        "time": target_time,
+        "target": Y_val,
+        "predicted": Y_pred,
+        "validation_nmse_x": nmse_x,
+        "validation_nmse_y": nmse_y,
+        "validation_nmse_2d": nmse_2d,
+    }
+
+
+def final_task_weight_rows(records, args, selected):
+    H = int(selected["H"])
+    D = int(selected["D"])
+    rows = []
+    reliability = []
+    for record in records:
+        P, Y, exps = selected_design(record, args, H, D)
+        model, p_mean, y_mean = fit_centered_ridge(P, Y, args.ridge_alpha)
+        pred = predict_centered(model, p_mean, y_mean, P)
+        nmse_x, nmse_y, nmse_2d = nmse_components(Y, pred)
+        p_centered = P - p_mean
+        y_centered = Y - np.mean(Y, axis=0, keepdims=True)
         denom_x = float(np.sum(y_centered[:, 0] ** 2))
         denom_y = float(np.sum(y_centered[:, 1] ** 2))
         denom_2d = float(np.sum(y_centered**2))
-        reliability_rows.append(
+        reliability.append(
             {
-                "sample": sample_name,
-                "Q_extra": Q_extra,
+                "topology": record["topology"],
+                "amplitude": record["amplitude"],
+                "sample": record["sample"],
+                "H": H,
                 "D": D,
-                "horizon_steps": horizon_steps,
-                "lag_stride_frames": lag_stride_frames,
-                "target_delay_frames_min": min(delay_set),
-                "target_delay_frames_max": max(delay_set),
-                "target_delay_set_frames": str(delay_set),
-                "selected_alpha": alpha,
                 "full_window_nmse_x": nmse_x,
                 "full_window_nmse_y": nmse_y,
                 "full_window_nmse_2d": nmse_2d,
-                "cv_val_nmse_2d_mean": record["val_nmse_2d_mean"],
-                "cv_val_nmse_2d_std": record["val_nmse_2d_std"],
+                "basis_R2_2d": 1.0 - nmse_2d,
             }
         )
-
-        coefficient_rows.append(
-            {
-                "sample": sample_name,
-                "basis_index": -1,
-                "basis_term": "intercept",
-                "total_degree": 0,
-                "Q_extra": Q_extra,
-                "max_effective_delay_Q": 0,
-                "target_delay_frames": "",
-                "max_lag_frames": 0,
-                "c_alpha_x": float(model.intercept_[0]),
-                "c_alpha_y": float(model.intercept_[1]),
-            }
-        )
-        for basis_index, exp_vec in enumerate(design_info["exps"]):
+        for basis_index, exp_vec in enumerate(exps):
             active = np.where(exp_vec > 0)[0]
-            max_q = int(np.max(active)) if len(active) else 0
-            target_delay = horizon_steps + max_q * lag_stride_frames
-            p_alpha = design_info["P"][:, basis_index]
+            max_delay = int(np.max(active)) if len(active) else 0
+            target_delay = args.horizon_steps + max_delay * args.lag_stride_frames
+            p_alpha = p_centered[:, basis_index]
             p_norm_sq = float(np.sum(p_alpha**2))
             coef_x = float(model.coef_[0, basis_index])
             coef_y = float(model.coef_[1, basis_index])
-            weight_x = (coef_x**2 * p_norm_sq) / max(denom_x, np.finfo(float).eps)
-            weight_y = (coef_y**2 * p_norm_sq) / max(denom_y, np.finfo(float).eps)
-            weight_2d = ((coef_x**2 + coef_y**2) * p_norm_sq) / max(
-                denom_2d, np.finfo(float).eps
-            )
-            coefficient_rows.append(
+            rows.append(
                 {
-                    "sample": sample_name,
+                    "topology": record["topology"],
+                    "amplitude": record["amplitude"],
+                    "sample": record["sample"],
                     "basis_index": basis_index,
-                    "basis_term": basis_term_name(exp_vec, horizon_steps, lag_stride_frames),
+                    "basis_term": term_name(exp_vec, args.horizon_steps, args.lag_stride_frames),
                     "total_degree": int(np.sum(exp_vec)),
-                    "Q_extra": Q_extra,
-                    "max_effective_delay_Q": max_q,
-                    "target_delay_frames": target_delay,
-                    "max_lag_frames": max_q * lag_stride_frames,
-                    "c_alpha_x": coef_x,
-                    "c_alpha_y": coef_y,
-                }
-            )
-            task_weight_rows.append(
-                {
-                    "sample": sample_name,
-                    "basis_index": basis_index,
-                    "basis_term": basis_term_name(exp_vec, horizon_steps, lag_stride_frames),
-                    "total_degree": int(np.sum(exp_vec)),
-                    "Q_extra": Q_extra,
-                    "max_effective_delay_Q": max_q,
-                    "target_delay_frames": target_delay,
+                    "max_readout_time_delay": max_delay,
+                    "max_target_time_delay": target_delay,
+                    "exponents": " ".join(str(int(v)) for v in exp_vec),
+                    "coefficient_x": coef_x,
+                    "coefficient_y": coef_y,
                     "p_alpha_norm_sq": p_norm_sq,
-                    "basis_contribution_weight_x": weight_x,
-                    "basis_contribution_weight_y": weight_y,
-                    "basis_contribution_weight_2d": weight_2d,
+                    "c_alpha_x": coef_x**2 * p_norm_sq / max(denom_x, np.finfo(float).eps),
+                    "c_alpha_y": coef_y**2 * p_norm_sq / max(denom_y, np.finfo(float).eps),
+                    "c_alpha": (coef_x**2 + coef_y**2)
+                    * p_norm_sq
+                    / max(denom_2d, np.finfo(float).eps),
                 }
             )
-
-    coeff_path = out_dir / f"hidden_node_{hidden_node}_final_coefficients.csv"
-    task_weight_path = out_dir / f"hidden_node_{hidden_node}_final_task_weights.csv"
-    reliability_path = out_dir / f"hidden_node_{hidden_node}_selected_basis_reliability.csv"
-    write_csv(coefficient_rows, coeff_path)
-    write_csv(task_weight_rows, task_weight_path)
-    write_csv(reliability_rows, reliability_path)
-    return coeff_path, task_weight_path, reliability_path
+    return rows, reliability
 
 
-def coefficient_heatmap_from_rows(coefficient_rows):
-    data_rows = [r for r in coefficient_rows if r["basis_index"] >= 0]
-    if not data_rows:
-        return np.zeros((1, 1))
-    max_degree = max(int(r["total_degree"]) for r in data_rows)
-    delays = sorted({int(r["target_delay_frames"]) for r in data_rows})
-    delay_to_col = {delay: col for col, delay in enumerate(delays)}
-    heatmap = np.zeros((max_degree, len(delays)), dtype=float)
-    for r in data_rows:
-        degree = int(r["total_degree"])
-        h = delay_to_col[int(r["target_delay_frames"])]
-        mag = np.sqrt(float(r["c_alpha_x"]) ** 2 + float(r["c_alpha_y"]) ** 2)
-        heatmap[degree - 1, h] += mag
-    return heatmap, delays
+def write_csv(rows, out_path):
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        out_path.write_text("")
+        return
+    fieldnames = []
+    for row in rows:
+        for key in row:
+            if key not in fieldnames:
+                fieldnames.append(key)
+    with out_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
-def save_metadata(out_dir, args, selected, global_best, adequacy_label):
-    metadata = {
-        "script": "run_hidden_node_basis_selection.py",
-        "purpose": (
-            "Scalar measured-input-history basis selection for hidden-node target. "
-            "This is not the reservoir hidden-node readout task."
-        ),
-        "distinction_from_reservoir_readout": {
-            "this_script_answers": (
-                "How well can scalar measured input history explain the hidden-node target?"
-            ),
-            "hidden_node_prediction_script_answers": (
-                "How well can visible reservoir states predict the hidden node?"
-            ),
-        },
-        "terminology": {
-            "Q_extra": "extra history depth before the prediction time",
-            "horizon_steps": args.horizon_steps,
-            "lag_stride_frames": args.lag_stride_frames,
-            "target_time_delay_formula": (
-                "target_delay_frames(q) = horizon_steps + q * lag_stride_frames"
-            ),
-            "important_note": (
-                "Q=0 with horizon_steps>0 corresponds to a nonzero input-to-target "
-                "delay equal to horizon_steps, not zero memory."
-            ),
-        },
-        "selection": {
-            "Q_extra": int(selected["Q_extra"]),
-            "D": int(selected["D"]),
-            "target_delay_set_frames": selected["target_delay_set_frames"],
-            "cv_nmse_2d_mean": float(selected["val_nmse_2d_mean"]),
-            "cv_nmse_2d_std_mean": float(selected["val_nmse_2d_cv_std_mean"]),
-            "adequacy": adequacy_label,
-        },
-        "global_best": {
-            "Q_extra": int(global_best["Q_extra"]),
-            "D": int(global_best["D"]),
-            "target_delay_set_frames": global_best["target_delay_set_frames"],
-            "cv_nmse_2d_mean": float(global_best["val_nmse_2d_mean"]),
-        },
-        "scientific_wording": (
-            "When the best CV basis NMSE is weak, the selected compact basis should "
-            "be interpreted only as the dominant input-driven component. It should "
-            "not be interpreted as the full delay or degree required by the physical "
-            "hidden-node task."
-        ),
-    }
-    metadata_path = out_dir / "basis_selection_metadata.json"
-    metadata_path.parent.mkdir(parents=True, exist_ok=True)
-    with metadata_path.open("w") as f:
-        json.dump(metadata, f, indent=2)
-    return metadata_path
+def write_json(payload, out_path):
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2))
 
 
-def panel_label(ax, label):
-    ax.text(
-        -0.12,
-        1.08,
-        label,
-        transform=ax.transAxes,
-        fontsize=8,
-        fontweight="bold",
-        va="top",
-        ha="left",
+def safe_path_part(text):
+    return "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in str(text))
+
+
+def exclusion_path_part(excluded_samples):
+    if not excluded_samples:
+        return None
+    parts = []
+    for topology in sorted(excluded_samples):
+        for sample in sorted(excluded_samples[topology]):
+            parts.append(f"{safe_path_part(topology)}_{safe_path_part(sample)}")
+    return "exclude_" + "__".join(parts)
+
+
+def output_dir(args, records, excluded_samples):
+    if args.output_dir:
+        return Path(args.output_dir)
+    topologies = sorted({r["topology"] for r in records})
+    if len(topologies) == 1:
+        label = topologies[0]
+    else:
+        label = f"{topologies[0]}_to_{topologies[-1]}"
+    base = (
+        data_root()
+        / "task_specific_ipc"
+        / "pdf_style_basis_calibration"
+        / label
+        / f"hidden_node_{args.hidden_node}"
+        / f"horizon_{args.horizon_steps}_steps"
     )
+    exclusion_label = exclusion_path_part(excluded_samples)
+    if exclusion_label:
+        base = base / exclusion_label
+    return base
 
 
-def plot_summary(summary, selected, coefficient_rows, out_path):
-    rows = [r for r in summary if r["status"] == "ok"]
-    fig = plt.figure(figsize=(7.4, 5.6), constrained_layout=True)
-    gs = fig.add_gridspec(2, 2)
-    ax_terms = fig.add_subplot(gs[0, 0])
-    ax_delay = fig.add_subplot(gs[0, 1])
-    ax_gap = fig.add_subplot(gs[1, 0])
-    ax_coef = fig.add_subplot(gs[1, 1])
-
-    colors = [PALETTE[f"degree{int(r['D'])}"] for r in rows]
-    ax_terms.scatter(
-        [r["number_of_terms"] for r in rows],
-        [r["val_nmse_2d_mean"] for r in rows],
-        s=34,
-        c=colors,
-        edgecolor="white",
-        linewidth=0.5,
+def save_plot(summary, selected, trace, out_path):
+    rows = sorted(summary, key=lambda r: (int(r["D"]), int(r["H"])))
+    fig, axes = plt.subplots(
+        3,
+        1,
+        figsize=(6.8, 7.4),
+        sharex=False,
+        constrained_layout=True,
+        gridspec_kw={"height_ratios": [1.0, 1.0, 1.25]},
     )
-    ax_terms.scatter(
-        selected["number_of_terms"],
-        selected["val_nmse_2d_mean"],
-        s=110,
-        marker="*",
-        color=PALETTE["validation"],
-        edgecolor="white",
-        linewidth=0.6,
-        zorder=5,
+    selected_H = int(selected["H"])
+    selected_D = int(selected["D"])
+    selected_nmse = float(selected["validation_nmse_2d_mean"])
+    selected_terms = int(selected["number_of_terms"])
+    selected_condition = float(selected["condition_number_mean"])
+    selected_text = (
+        "Selected cutoff\n"
+        f"H_cut = {selected_H}\n"
+        f"D_cut = {selected_D}\n"
+        f"val NMSE_2D = {selected_nmse:.4f}\n"
+        f"terms = {selected_terms}"
     )
-    ax_terms.annotate(
-        f"selected\nQ={int(selected['Q_extra'])}, D={int(selected['D'])}",
-        xy=(selected["number_of_terms"], selected["val_nmse_2d_mean"]),
-        xytext=(10, 14),
-        textcoords="offset points",
-        fontsize=6,
-        color=PALETTE["validation"],
-        arrowprops={"arrowstyle": "-", "color": PALETTE["validation"], "lw": 0.7},
-    )
-    ax_terms.set_xscale("log")
-    ax_terms.set_xlabel("number of Legendre terms")
-    ax_terms.set_ylabel("CV NMSE, 2D")
-    ax_terms.set_title("Basis size versus CV error")
-    ax_terms.grid(axis="y", color=PALETTE["grid"], lw=0.6)
-    panel_label(ax_terms, "a")
-
-    for D in sorted({int(r["D"]) for r in rows}):
-        group = sorted(
-            [r for r in rows if int(r["D"]) == D],
-            key=lambda r: r["target_delay_frames_max"],
-        )
-        ax_delay.plot(
-            [r["target_delay_frames_max"] for r in group],
-            [r["val_nmse_2d_mean"] for r in group],
+    for i, D in enumerate(sorted({int(r["D"]) for r in rows})):
+        group = [r for r in rows if int(r["D"]) == D]
+        axes[0].plot(
+            [int(r["H"]) for r in group],
+            [float(r["validation_nmse_2d_mean"]) for r in group],
             marker="o",
             lw=1.2,
-            color=PALETTE[f"degree{D}"],
+            color=PALETTE[i % len(PALETTE)],
             label=f"D={D}",
         )
-    ax_delay.scatter(
-        selected["target_delay_frames_max"],
-        selected["val_nmse_2d_mean"],
-        s=110,
+    axes[0].scatter(
+        selected_H,
+        selected_nmse,
         marker="*",
-        color=PALETTE["validation"],
+        s=140,
+        color="#D55E00",
         edgecolor="white",
         linewidth=0.6,
         zorder=5,
     )
-    max_delay = int(max(r["target_delay_frames_max"] for r in rows))
-    min_delay = int(min(r["target_delay_frames_max"] for r in rows))
-    ax_delay.set_xlim(min_delay - 0.5, max_delay + 0.5)
-    ax_delay.set_xticks(
-        np.arange(min_delay, max_delay + 1, max(1, (max_delay - min_delay) // 5))
+    axes[0].annotate(
+        f"H={selected_H}, D={selected_D}\nNMSE={selected_nmse:.4f}",
+        xy=(selected_H, selected_nmse),
+        xytext=(8, 12),
+        textcoords="offset points",
+        fontsize=7,
+        color="#111827",
+        arrowprops={"arrowstyle": "->", "color": "#6B7280", "lw": 0.7},
     )
-    ax_delay.set_xlabel("maximum target-time input delay (frames)")
-    ax_delay.set_ylabel("CV NMSE, 2D")
-    ax_delay.set_title("Delay sweep grouped by degree")
-    ax_delay.grid(axis="y", color=PALETTE["grid"], lw=0.6)
-    ax_delay.legend(fontsize=6)
-    panel_label(ax_delay, "b")
+    axes[0].text(
+        0.98,
+        0.96,
+        selected_text,
+        transform=axes[0].transAxes,
+        ha="right",
+        va="top",
+        fontsize=7,
+        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "edgecolor": "#D1D5DB"},
+    )
+    axes[0].set_xlabel("input-history cutoff H")
+    axes[0].set_ylabel("validation NMSE, 2D")
+    axes[0].set_title("PDF-style holdout calibration")
+    axes[0].grid(axis="y", color="#E5E7EB", lw=0.6)
+    axes[0].legend(fontsize=7)
 
-    ax_gap.scatter(
-        [r["train_nmse_2d_mean"] for r in rows],
-        [r["val_nmse_2d_mean"] for r in rows],
-        s=34,
+    colors = [PALETTE[(int(r["D"]) - 1) % len(PALETTE)] for r in rows]
+    axes[1].scatter(
+        [float(r["condition_number_mean"]) for r in rows],
+        [float(r["validation_nmse_2d_mean"]) for r in rows],
         c=colors,
+        s=32,
         edgecolor="white",
         linewidth=0.5,
     )
-    ax_gap.scatter(
-        selected["train_nmse_2d_mean"],
-        selected["val_nmse_2d_mean"],
-        s=110,
+    axes[1].scatter(
+        selected_condition,
+        selected_nmse,
         marker="*",
-        color=PALETTE["validation"],
+        s=140,
+        color="#D55E00",
         edgecolor="white",
         linewidth=0.6,
         zorder=5,
     )
-    lim_max = max(
-        max(r["train_nmse_2d_mean"] for r in rows),
-        max(r["val_nmse_2d_mean"] for r in rows),
-    ) * 1.08
-    ax_gap.plot([0, lim_max], [0, lim_max], color="#4B5563", lw=0.8, ls=":")
-    ax_gap.set_xlim(left=0)
-    ax_gap.set_ylim(bottom=0)
-    ax_gap.set_xlabel("train NMSE, 2D")
-    ax_gap.set_ylabel("validation NMSE, 2D")
-    ax_gap.set_title("Blocked CV train-validation gap")
-    ax_gap.grid(axis="y", color=PALETTE["grid"], lw=0.6)
-    panel_label(ax_gap, "c")
-
-    heatmap, heatmap_delays = coefficient_heatmap_from_rows(coefficient_rows)
-    im = ax_coef.imshow(heatmap, aspect="auto", origin="lower", cmap="magma")
-    cbar = fig.colorbar(im, ax=ax_coef, fraction=0.046, pad=0.02)
-    cbar.set_label("|c_alpha| sum")
-    ax_coef.set_yticks(np.arange(heatmap.shape[0]))
-    ax_coef.set_yticklabels([str(i + 1) for i in range(heatmap.shape[0])])
-    ax_coef.set_xticks(np.arange(len(heatmap_delays)))
-    ax_coef.set_xticklabels([str(delay) for delay in heatmap_delays])
-    ax_coef.set_xlabel("target-time delay (frames)")
-    ax_coef.set_ylabel("total degree")
-    ax_coef.set_title(
-        f"Full-window coefficients: Q={int(selected['Q_extra'])}, D={int(selected['D'])}"
+    axes[1].annotate(
+        f"H={selected_H}, D={selected_D}\nNMSE={selected_nmse:.4f}",
+        xy=(selected_condition, selected_nmse),
+        xytext=(8, 12),
+        textcoords="offset points",
+        fontsize=7,
+        color="#111827",
+        arrowprops={"arrowstyle": "->", "color": "#6B7280", "lw": 0.7},
     )
-    panel_label(ax_coef, "d")
+    axes[1].set_xscale("log")
+    axes[1].set_xlabel("mean condition number")
+    axes[1].set_ylabel("validation NMSE, 2D")
+    axes[1].set_title("Conditioning check")
+    axes[1].grid(axis="y", color="#E5E7EB", lw=0.6)
 
-    fig.suptitle(
-        f"Selected compact basis: Q={int(selected['Q_extra'])}, D={int(selected['D'])}; "
-        f"target-time delays = {selected['target_delay_set_frames']} frames; "
-        f"explanation = {basis_label(selected['val_nmse_2d_mean'])}",
-        fontsize=8,
-        y=1.02,
+    t = trace["time"]
+    target = trace["target"]
+    predicted = trace["predicted"]
+    axes[2].plot(
+        t,
+        target[:, 0],
+        color="#0072B2",
+        lw=1.15,
+        label="x measured",
     )
+    axes[2].plot(
+        t,
+        predicted[:, 0],
+        color="#0072B2",
+        lw=1.15,
+        ls="--",
+        label="x basis fit",
+    )
+    axes[2].plot(
+        t,
+        target[:, 1],
+        color="#009E73",
+        lw=1.15,
+        label="y measured",
+    )
+    axes[2].plot(
+        t,
+        predicted[:, 1],
+        color="#009E73",
+        lw=1.15,
+        ls="--",
+        label="y basis fit",
+    )
+    trace_label = f"{trace['topology']}/{trace['amplitude']}/{trace['sample']}"
+    axes[2].set_title("Selected Legendre basis reconstruction on validation window")
+    axes[2].set_xlabel("validation time (s)")
+    axes[2].set_ylabel("relative hidden-node position")
+    axes[2].grid(axis="y", color="#E5E7EB", lw=0.6)
+    axes[2].legend(ncol=4, fontsize=7, loc="upper left")
+    axes[2].text(
+        0.98,
+        0.96,
+        (
+            f"{trace_label}\n"
+            f"NMSE_x = {trace['validation_nmse_x']:.3f}\n"
+            f"NMSE_y = {trace['validation_nmse_y']:.3f}\n"
+            f"NMSE_2D = {trace['validation_nmse_2d']:.3f}"
+        ),
+        transform=axes[2].transAxes,
+        ha="right",
+        va="top",
+        fontsize=7,
+        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "edgecolor": "#D1D5DB"},
+    )
+
+    for label, ax in zip(("a", "b", "c"), axes):
+        ax.text(
+            -0.08,
+            1.06,
+            label,
+            transform=ax.transAxes,
+            fontweight="bold",
+            fontsize=9,
+            va="bottom",
+        )
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, bbox_inches="tight")
+    if out_path.suffix.lower() == ".pdf":
+        fig.savefig(out_path.with_suffix(".svg"), bbox_inches="tight")
+        fig.savefig(out_path.with_suffix(".png"), dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
 def main():
-    warnings.filterwarnings("ignore", category=LinAlgWarning)
-    warnings.filterwarnings("ignore", message="Singular matrix in solving dual problem.*")
     configure_matplotlib()
     args = parse_args()
+    records, skipped, excluded_samples = discover_records(args)
+    pairs = candidate_pairs(args)
+    out_dir = output_dir(args, records, excluded_samples)
 
-    data_root = src_dir.parent / "data" / "experiment_data"
-    base_dir = data_root / args.topology / args.amplitude
-    sample_dirs = find_sample_dirs(base_dir, args.sample)
-    out_dir = (
-        base_dir
-        / "plots"
-        / f"hidden_node_{args.hidden_node}_basis_selection"
-        / f"horizon_{args.horizon_steps}_steps"
-        / f"lag_stride_{args.lag_stride_frames}_frames"
-    )
+    print("PDF-style basis calibration:")
+    print("  fit basis model on train window")
+    print("  evaluate H,D on validation window")
+    print("  no blocked CV, no optional degree trigger")
+    print("  selected topology/sample records:")
+    for record in records:
+        print(f"    {record['topology']}/{record['amplitude']}/{record['sample']}")
 
-    print(
-        "Basis-selection setup: "
-        f"target=node {args.hidden_node} relative to node {args.reference_node}, "
-        f"input=measured actuator node, horizon h={args.horizon_steps} frame(s), "
-        f"lag stride K={args.lag_stride_frames} frame(s)."
-    )
-    print(
-        "Using one 20 s post-washout basis-selection window with "
-        "4 contiguous leave-one-block-out folds."
-    )
-    print("This does not use reservoir states or reservoir readout NMSE.")
-    print(
-        "Q is extra history depth before the prediction time. The actual "
-        "input-to-target delay is horizon_steps + Q * lag_stride_frames."
-    )
+    per_sample_rows = []
+    for record in records:
+        print(f"-> Evaluating {record['topology']}/{record['amplitude']}/{record['sample']}")
+        for H, D in pairs:
+            per_sample_rows.append(evaluate_candidate(record, args, H, D))
 
-    main_pairs = candidate_pairs(args, include_degree3=False)
-    all_records = []
-    per_sample_cache = {}
-    for sample_dir in sample_dirs:
-        print(f"-> Main search for {sample_dir.name}")
-        records, cache = evaluate_sample(sample_dir, args, main_pairs)
-        all_records.extend(records)
-        per_sample_cache[sample_dir.name] = cache
+    summary = summarize_candidates(per_sample_rows)
+    topology_summary = summarize_by_topology(per_sample_rows)
+    selected, best, tolerance = choose_common_cutoff(summary, args.tolerance_frac)
+    task_weights, reliability = final_task_weight_rows(records, args, selected)
+    trace = selected_validation_trace(records[0], args, selected)
+    label = basis_label(float(selected["validation_nmse_2d_mean"]))
 
-    all_pairs = list(main_pairs)
-    summary = aggregate_records(all_records, all_pairs)
-    d2_rows = [r for r in summary if int(r["D"]) == 2 and r["status"] == "ok"]
-    best_d2 = min(d2_rows, key=lambda r: r["val_nmse_2d_mean"]) if d2_rows else None
-    if best_d2 is not None and best_d2["val_nmse_2d_mean"] > args.D3_trigger_nmse:
-        d3_pairs = [(Q_extra, 3) for Q_extra in range(args.Q_min, args.Q_max + 1)]
-        print(
-            f"Best D=2 CV NMSE_2D={best_d2['val_nmse_2d_mean']:.4f} "
-            f"> {args.D3_trigger_nmse:.4f}; running optional D=3 search."
+    payload = {
+        "script": "run_hidden_node_basis_selection.py",
+        "selection_protocol": "PDF-style holdout: fit train window, validate validation window",
+        "topologies": sorted({r["topology"] for r in records}),
+        "amplitudes_by_topology": {
+            topology: sorted({r["amplitude"] for r in records if r["topology"] == topology})
+            for topology in sorted({r["topology"] for r in records})
+        },
+        "hidden_node": int(args.hidden_node),
+        "reference_node": int(args.reference_node),
+        "horizon_steps": int(args.horizon_steps),
+        "washout_s": float(args.washout),
+        "train_s": float(args.train),
+        "validation_s": float(args.validation),
+        "ridge_alpha": float(args.ridge_alpha),
+        "H_cut": int(selected["H"]),
+        "D_cut": int(selected["D"]),
+        "readout_time_delays": list(range(int(selected["H"]) + 1)),
+        "target_time_delays": target_time_delays(
+            int(selected["H"]), args.horizon_steps, args.lag_stride_frames
+        ),
+        "selected_validation_nmse_2d": float(selected["validation_nmse_2d_mean"]),
+        "global_best_H": int(best["H"]),
+        "global_best_D": int(best["D"]),
+        "global_best_validation_nmse_2d": float(best["validation_nmse_2d_mean"]),
+        "selection_tolerance_nmse_2d": float(tolerance),
+        "basis_adequacy_label": label,
+        "num_terms_selected": int(selected["number_of_terms"]),
+        "representative_trace": {
+            "topology": trace["topology"],
+            "amplitude": trace["amplitude"],
+            "sample": trace["sample"],
+            "validation_nmse_x": float(trace["validation_nmse_x"]),
+            "validation_nmse_y": float(trace["validation_nmse_y"]),
+            "validation_nmse_2d": float(trace["validation_nmse_2d"]),
+        },
+        "skipped": skipped,
+        "excluded_samples": {
+            topology: sorted(samples) for topology, samples in excluded_samples.items()
+        },
+    }
+    trace_rows = [
+        {
+            "topology": trace["topology"],
+            "amplitude": trace["amplitude"],
+            "sample": trace["sample"],
+            "time_s": float(time_value),
+            "target_x": float(target_xy[0]),
+            "target_y": float(target_xy[1]),
+            "basis_fit_x": float(pred_xy[0]),
+            "basis_fit_y": float(pred_xy[1]),
+        }
+        for time_value, target_xy, pred_xy in zip(
+            trace["time"], trace["target"], trace["predicted"]
         )
-        for sample_dir in sample_dirs:
-            print(f"-> Optional D=3 search for {sample_dir.name}")
-            records, cache = evaluate_sample(sample_dir, args, d3_pairs)
-            all_records.extend(records)
-            per_sample_cache[sample_dir.name].update(cache)
-        all_pairs.extend(d3_pairs)
-        summary = aggregate_records(all_records, all_pairs)
-    elif best_d2 is not None:
-        print(
-            f"Skipping D=3 search: best D=2 CV NMSE_2D={best_d2['val_nmse_2d_mean']:.4f} "
-            f"<= {args.D3_trigger_nmse:.4f}."
-        )
+    ]
 
-    selected, global_best, best_larger, relative_gain = choose_recommendation(summary)
-    selected_pair = (int(selected["Q_extra"]), int(selected["D"]))
-    sample_designs = selected_sample_designs(sample_dirs, args, selected_pair)
-    coeff_path, task_weight_path, reliability_path = refit_selected_basis(
-        sample_designs,
-        selected,
-        out_dir,
-        args.hidden_node,
-        args.horizon_steps,
-        args.lag_stride_frames,
-    )
+    write_csv(per_sample_rows, out_dir / "basis_calibration_per_sample.csv")
+    write_csv(summary, out_dir / "basis_calibration_summary.csv")
+    write_csv(topology_summary, out_dir / "basis_calibration_by_topology.csv")
+    write_csv(task_weights, out_dir / "task_weights_selected_dictionary.csv")
+    write_csv(reliability, out_dir / "selected_dictionary_reliability.csv")
+    write_csv(trace_rows, out_dir / "selected_basis_validation_trace.csv")
+    write_csv(skipped, out_dir / "skipped_records.csv")
+    write_json(payload, out_dir / "selected_dictionary.json")
+    save_plot(summary, selected, trace, out_dir / "basis_calibration_summary.pdf")
 
-    with coeff_path.open("r", newline="") as f:
-        coefficient_rows = [
-            {
-                **row,
-                "basis_index": int(row["basis_index"]),
-                "total_degree": int(row["total_degree"]),
-                "max_effective_delay_Q": int(row["max_effective_delay_Q"]),
-                "target_delay_frames": int(row["target_delay_frames"])
-                if row["target_delay_frames"]
-                else "",
-                "c_alpha_x": float(row["c_alpha_x"]),
-                "c_alpha_y": float(row["c_alpha_y"]),
-            }
-            for row in csv.DictReader(f)
-        ]
-
-    per_sample_csv = out_dir / f"hidden_node_{args.hidden_node}_basis_selection_cv_per_sample.csv"
-    summary_csv = out_dir / f"hidden_node_{args.hidden_node}_basis_selection_cv_summary.csv"
-    figure_pdf = out_dir / f"hidden_node_{args.hidden_node}_basis_selection_cv_summary.pdf"
-    write_csv(all_records, per_sample_csv)
-    write_csv(summary, summary_csv)
-    plot_summary(summary, selected, coefficient_rows, figure_pdf)
-
-    label = basis_label(selected["val_nmse_2d_mean"])
-    metadata_path = save_metadata(out_dir, args, selected, global_best, label)
-    print(f"Saved per-sample CV CSV: {per_sample_csv}")
-    print(f"Saved summary CV CSV: {summary_csv}")
-    print(f"Saved final coefficients: {coeff_path}")
-    print(f"Saved final task contribution weights: {task_weight_path}")
-    print(f"Saved selected-basis reliability: {reliability_path}")
-    print(f"Saved basis-selection metadata: {metadata_path}")
-    print(f"Saved PDF figure: {figure_pdf}")
+    print(f"Saved PDF-style basis calibration outputs to: {out_dir}")
     print(
-        "Selected compact basis:\n"
-        f"    Q = {int(selected['Q_extra'])}\n"
-        f"    D = {int(selected['D'])}\n"
-        f"    horizon h = {args.horizon_steps} frames\n"
-        f"    lag stride K = {args.lag_stride_frames} frame(s)\n"
-        f"    target-time delay set = {selected['target_delay_set_frames']} frames\n"
-        f"Mean CV NMSE_2D={selected['val_nmse_2d_mean']:.4f} "
-        f"+/- {selected['val_nmse_2d_cv_std_mean']:.4f}; adequacy={label}."
+        f"Selected common cutoff: H={payload['H_cut']}, D={payload['D_cut']}, "
+        f"validation NMSE_2D={payload['selected_validation_nmse_2d']:.4f}, "
+        f"adequacy={label}."
     )
     print(
-        "Interpretation: Q=0 does not mean zero memory. It means the dominant "
-        f"input-driven component is associated with input {args.horizon_steps} "
-        "frames before the target."
-    )
-    if label == "weak":
-        print(
-            "No adequate scalar input-history basis was found. The selected compact "
-            "basis only captures the dominant input-driven component."
-        )
-    elif label == "partial":
-        print(
-            "Interpretation: the tested input-history polynomial basis captures only "
-            "the dominant input-driven component; do not claim the full task only "
-            "requires this Q,D."
-        )
-    if best_larger is not None:
-        print(
-            f"Best larger candidate: Q={int(best_larger['Q_extra'])}, D={int(best_larger['D'])}, "
-            f"target delay max={int(best_larger['target_delay_frames_max'])} frames, "
-            f"CV NMSE_2D={best_larger['val_nmse_2d_mean']:.4f}; "
-            f"relative gain={100.0 * relative_gain:.1f}%."
-        )
-    print(
-        f"Global best by CV NMSE alone: Q={int(global_best['Q_extra'])}, "
-        f"D={int(global_best['D'])}, "
-        f"target delay max={int(global_best['target_delay_frames_max'])} frames, "
-        f"CV NMSE_2D={global_best['val_nmse_2d_mean']:.4f}."
+        f"Global best by validation NMSE: H={payload['global_best_H']}, "
+        f"D={payload['global_best_D']}, "
+        f"NMSE_2D={payload['global_best_validation_nmse_2d']:.4f}."
     )
 
 

@@ -1,0 +1,26 @@
+{
+  "script": "run_mixed_topology_minimal_ipc_summary.py",
+  "purpose": "minimal mixed-amplitude topology-family task-specific IPC summary",
+  "H_cut": 1,
+  "D_cut": 1,
+  "H_max_initial": 1,
+  "D_max_initial": 1,
+  "horizon_steps": 5,
+  "lag_stride_frames": 1,
+  "readout_time_delays": [
+    0,
+    1
+  ],
+  "target_time_delays": [
+    5,
+    6
+  ],
+  "adequacy_label": "fixed compact dictionary",
+  "num_terms_selected": 2,
+  "hidden_node": 10,
+  "reference_node": 0,
+  "washout_s": 5.0,
+  "train_s": 10.0,
+  "test_s": 10.0,
+  "basis_window_s": 20.0
+}

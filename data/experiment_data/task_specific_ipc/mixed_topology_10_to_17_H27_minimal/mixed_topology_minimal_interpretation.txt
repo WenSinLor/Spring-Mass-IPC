@@ -1,0 +1,13 @@
+Mixed-amplitude minimal topology summary
+========================================
+
+Included topology folders use their available amplitude folders. All included samples use hidden_node=10, reference_node=0, horizon_steps=5.
+
+The task-specific IPC uses one fixed common dictionary for every included topology:
+  H_cut=27, D_cut=1, terms=[P1(u_m), ..., P1(u_{m-27})].
+
+Lowest actual hidden-node NMSE: topology 15 (topology_15_prestress, amp=2.5), NMSE=0.2376.
+Lowest basis NMSE: topology 15 (topology_15_prestress, amp=2.5), basis NMSE=0.2635.
+Highest Q_twIPC: topology 15 (topology_15_prestress, amp=2.5), Q_twIPC=10.9268.
+
+Skipped topology indices:

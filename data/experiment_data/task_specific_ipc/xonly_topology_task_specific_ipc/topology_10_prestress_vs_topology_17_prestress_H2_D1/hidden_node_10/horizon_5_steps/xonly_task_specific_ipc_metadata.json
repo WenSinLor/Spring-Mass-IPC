@@ -1,0 +1,38 @@
+{
+  "script": "run_xonly_task_specific_ipc_topology10_vs17.py",
+  "purpose": "x-only task-specific IPC comparison; y target intentionally dropped",
+  "task_weight_formula": "c_alpha_x = a_alpha_x^2 * ||P_alpha - mean(P_alpha)||^2 / ||x_target - mean(x_target)||^2",
+  "Q_x_twIPC_formula": "sum_alpha c_alpha_x * IPC_alpha",
+  "topologies": [
+    "topology_10_prestress",
+    "topology_17_prestress"
+  ],
+  "amplitudes_by_topology": {
+    "topology_10_prestress": [
+      "amp=2.5"
+    ],
+    "topology_17_prestress": [
+      "amp=1"
+    ]
+  },
+  "hidden_node": 10,
+  "reference_node": 0,
+  "horizon_steps": 5,
+  "washout_s": 5.0,
+  "train_s": 10.0,
+  "test_s": 10.0,
+  "H_cut": 2,
+  "D_cut": 1,
+  "lag_stride_frames": 1,
+  "target_time_delays": [
+    5,
+    6,
+    7
+  ],
+  "task_ridge_alpha": 0.1,
+  "ipc_ridge_alpha": 1e-06,
+  "actual_task_ridge_alpha": 1e-06,
+  "global_standardize": true,
+  "skipped": [],
+  "excluded_samples": {}
+}

@@ -26,3 +26,5 @@ data/experiment_data/topology_9/
 data/experiment_data/topology_9_narma/
 **metrics/
 **__pycache__/
+*.mp4
+*.DS_Store

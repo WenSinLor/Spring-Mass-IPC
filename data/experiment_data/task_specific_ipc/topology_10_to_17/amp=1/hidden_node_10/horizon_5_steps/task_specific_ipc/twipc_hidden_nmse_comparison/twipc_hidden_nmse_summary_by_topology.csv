@@ -1,0 +1,2 @@
+topology,num_samples,basis_adequacy_label,actual_test_nmse_2d_mean,actual_test_nmse_2d_std,Q_twIPC_clipped_mean,Q_twIPC_clipped_std,Q_twIPC_raw_mean,Q_twIPC_raw_std,generic_total_ipc_clipped_mean,generic_total_ipc_clipped_std,basis_nmse_2d_mean,basis_nmse_2d_std
+topology_17_prestress,5,weak,0.4460373901110769,0.5096496870768301,10.107630043169161,1.3982887235488157,-2.6835255762428134,26.91383696800703,12.227695693878097,4.849971636769969,0.3363273187733925,0.0018368023409353663

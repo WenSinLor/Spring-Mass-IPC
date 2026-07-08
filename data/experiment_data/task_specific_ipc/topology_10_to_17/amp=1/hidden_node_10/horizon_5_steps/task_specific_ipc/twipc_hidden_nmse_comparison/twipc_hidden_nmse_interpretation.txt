@@ -1,0 +1,5 @@
+# Task-Specific IPC vs Hidden-Node NMSE
+
+Need at least two topologies for comparison.
+
+Need multiple topologies to interpret Q_twIPC-performance ranking.
