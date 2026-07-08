@@ -1,0 +1,6 @@
+# Memory vs Hidden-Node Task Comparison
+
+Ranking consistency for M_0_5: topology_10_prestress has higher memory; topology_10_prestress has lower hidden-node NMSE; consistent=True
+Ranking consistency for M_0_10: topology_17_prestress has higher memory; topology_10_prestress has lower hidden-node NMSE; consistent=False
+
+topology_10_prestress has stronger fixed delayed-input memory over the forecast-relevant delay range and also achieves lower hidden-node prediction NMSE. This supports the interpretation that memory-enhanced visible-state encoding contributes to better hidden-node prediction.

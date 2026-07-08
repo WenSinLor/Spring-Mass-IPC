@@ -1,0 +1,30 @@
+{
+  "script": "run_hidden_node_basis_selection.py",
+  "purpose": "Scalar measured-input-history basis selection for hidden-node target. This is not the reservoir hidden-node readout task.",
+  "distinction_from_reservoir_readout": {
+    "this_script_answers": "How well can scalar measured input history explain the hidden-node target?",
+    "hidden_node_prediction_script_answers": "How well can visible reservoir states predict the hidden node?"
+  },
+  "terminology": {
+    "Q_extra": "extra history depth before the prediction time",
+    "horizon_steps": 5,
+    "lag_stride_frames": 1,
+    "target_time_delay_formula": "target_delay_frames(q) = horizon_steps + q * lag_stride_frames",
+    "important_note": "Q=0 with horizon_steps>0 corresponds to a nonzero input-to-target delay equal to horizon_steps, not zero memory."
+  },
+  "selection": {
+    "Q_extra": 0,
+    "D": 1,
+    "target_delay_set_frames": "[5]",
+    "cv_nmse_2d_mean": 0.41694971346288295,
+    "cv_nmse_2d_std_mean": 0.12370232311707094,
+    "adequacy": "weak"
+  },
+  "global_best": {
+    "Q_extra": 10,
+    "D": 1,
+    "target_delay_set_frames": "[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]",
+    "cv_nmse_2d_mean": 0.3994505303359265
+  },
+  "scientific_wording": "When the best CV basis NMSE is weak, the selected compact basis should be interpreted only as the dominant input-driven component. It should not be interpreted as the full delay or degree required by the physical hidden-node task."
+}

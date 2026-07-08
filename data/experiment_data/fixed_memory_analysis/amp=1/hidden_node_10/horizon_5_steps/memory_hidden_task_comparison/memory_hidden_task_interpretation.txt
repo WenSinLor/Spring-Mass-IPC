@@ -1,0 +1,5 @@
+# Memory vs Hidden-Node Task Comparison
+
+Need at least two topologies for ranking comparison.
+
+Need multiple topologies to interpret memory-performance ranking.
