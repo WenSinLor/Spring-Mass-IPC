@@ -28,20 +28,20 @@
     6,
     7
   ],
-  "selected_validation_nmse_2d": 0.3306438133567534,
+  "selected_validation_nmse_2d": 0.3306438992009486,
   "global_best_H": 2,
   "global_best_D": 1,
-  "global_best_validation_nmse_2d": 0.3306438133567534,
-  "selection_tolerance_nmse_2d": 0.3471760040245911,
+  "global_best_validation_nmse_2d": 0.3306438992009486,
+  "selection_tolerance_nmse_2d": 0.34717609416099604,
   "basis_adequacy_label": "partial",
   "num_terms_selected": 3,
   "representative_trace": {
     "topology": "topology_17_prestress",
     "amplitude": "amp=1",
     "sample": "sample_0",
-    "validation_nmse_x": 0.25470374587440425,
-    "validation_nmse_y": 0.9368955188336833,
-    "validation_nmse_2d": 0.32536800488996426
+    "validation_nmse_x": 0.25470389214437616,
+    "validation_nmse_y": 0.9368955254037042,
+    "validation_nmse_2d": 0.32536813668923453
   },
   "skipped": [],
   "excluded_samples": {

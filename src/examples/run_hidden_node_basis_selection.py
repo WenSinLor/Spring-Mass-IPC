@@ -22,7 +22,7 @@ sys.path.insert(0, str(src_dir))
 from openprc.reservoir.io.state_loader import StateLoader
 
 
-DEFAULT_TOPOLOGY = "topology_17_prestress"
+DEFAULT_TOPOLOGY = "topology_10_prestress"
 DEFAULT_TOPOLOGY_FORMAT = "topology_{i}_prestress"
 DEFAULT_AMPLITUDE = "auto"
 DEFAULT_HIDDEN_NODE = 10
@@ -32,8 +32,8 @@ DEFAULT_WASHOUT_S = 5.0
 DEFAULT_TRAIN_S = 10.0
 DEFAULT_VALIDATION_S = 10.0
 DEFAULT_H_MIN = 0
-DEFAULT_H_MAX = 30
-DEFAULT_D_VALUES = [1, 2]
+DEFAULT_H_MAX = 15
+DEFAULT_D_VALUES = [1, 2, 3]
 DEFAULT_LAG_STRIDE_FRAMES = 1
 DEFAULT_RIDGE_ALPHA = 1e-6
 DEFAULT_TOLERANCE_FRAC = 0.05
@@ -377,7 +377,7 @@ def nmse_components(y_true, y_pred):
 def fit_centered_ridge(P_train, Y_train, alpha):
     p_mean = np.mean(P_train, axis=0, keepdims=True)
     y_mean = np.mean(Y_train, axis=0, keepdims=True)
-    model = Ridge(alpha=alpha, fit_intercept=False)
+    model = Ridge(alpha=alpha, fit_intercept=False, solver="svd")
     model.fit(P_train - p_mean, Y_train - y_mean)
     return model, p_mean, y_mean
 
@@ -861,14 +861,14 @@ def save_plot(summary, selected, trace, out_path):
     axes[2].plot(
         t,
         target[:, 0],
-        color="#0072B2",
+        color="#8FBAD9",
         lw=1.15,
         label="x measured",
     )
     axes[2].plot(
         t,
         predicted[:, 0],
-        color="#0072B2",
+        color="#1F4E79",
         lw=1.15,
         ls="--",
         label="x basis fit",
@@ -876,14 +876,14 @@ def save_plot(summary, selected, trace, out_path):
     axes[2].plot(
         t,
         target[:, 1],
-        color="#009E73",
+        color="#8DD3C7",
         lw=1.15,
         label="y measured",
     )
     axes[2].plot(
         t,
         predicted[:, 1],
-        color="#009E73",
+        color="#006D5B",
         lw=1.15,
         ls="--",
         label="y basis fit",
@@ -893,7 +893,14 @@ def save_plot(summary, selected, trace, out_path):
     axes[2].set_xlabel("validation time (s)")
     axes[2].set_ylabel("relative hidden-node position")
     axes[2].grid(axis="y", color="#E5E7EB", lw=0.6)
-    axes[2].legend(ncol=4, fontsize=7, loc="upper left")
+    axes[2].legend(
+        ncol=1,
+        fontsize=7,
+        loc="center left",
+        bbox_to_anchor=(1.01, 0.5),
+        borderaxespad=0.0,
+        handlelength=1.8,
+    )
     axes[2].text(
         0.98,
         0.96,

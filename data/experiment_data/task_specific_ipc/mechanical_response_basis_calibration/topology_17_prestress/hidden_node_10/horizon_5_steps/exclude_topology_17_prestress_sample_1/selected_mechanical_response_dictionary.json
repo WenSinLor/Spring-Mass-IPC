@@ -1,0 +1,83 @@
+{
+  "script": "run_hidden_node_mechanical_response_basis.py",
+  "selection_protocol": "mechanics-informed response basis; FFT on train window only; holdout validation",
+  "topologies": [
+    "topology_17_prestress"
+  ],
+  "amplitudes_by_topology": {
+    "topology_17_prestress": [
+      "amp=1"
+    ]
+  },
+  "hidden_node": 10,
+  "reference_node": 0,
+  "horizon_steps": 5,
+  "washout_s": 5.0,
+  "train_s": 10.0,
+  "validation_s": 10.0,
+  "ridge_alpha": 1e-06,
+  "target_component": "y",
+  "frequency_source": "hidden_target",
+  "hann_window_used": true,
+  "coherence_available": true,
+  "frequency_refinement_enabled": true,
+  "refine_target_hz": 5.9,
+  "refine_half_width_hz": 0.5,
+  "refine_step_hz": 0.01,
+  "drive_channels_available": [
+    "u"
+  ],
+  "selected_drive_channels": [
+    "u"
+  ],
+  "drive_smoothing_frames": null,
+  "candidate_sweep_includes_drive_sets": false,
+  "selected_frequency_set_type": "refined_single",
+  "selected_frequency_set_label": "refined_5.8200Hz",
+  "selected_refined_frequency_hz": 5.82,
+  "selected_K": 1,
+  "selected_frequencies_hz": {
+    "topology_17_prestress/sample_0": [
+      5.82
+    ],
+    "topology_17_prestress/sample_2": [
+      5.82
+    ],
+    "topology_17_prestress/sample_3": [
+      5.82
+    ],
+    "topology_17_prestress/sample_4": [
+      5.82
+    ]
+  },
+  "selected_filter_length_s": 3.0,
+  "selected_filter_length_frames": 90,
+  "decay_times_s": [
+    0.2,
+    0.5,
+    1.0,
+    2.0,
+    5.0
+  ],
+  "mechanical_degree": 2,
+  "include_nonlinear_products": true,
+  "number_drive_channels": 1,
+  "number_linear_features": 10.0,
+  "number_candidate_features": 65.0,
+  "number_raw_features": 65.0,
+  "selected_svd_rank": 20.0,
+  "condition_number": 39.48725700378418,
+  "selection_metric": "validation_nmse_2d",
+  "selected_validation_nmse_x": 0.31093275914548796,
+  "selected_validation_nmse_y": 0.6023583811260493,
+  "selected_validation_nmse_2d": 0.34224966853625527,
+  "basis_adequacy_label_x": "partial",
+  "basis_adequacy_label_y": "weak",
+  "basis_adequacy_label_2d": "partial",
+  "skipped": [],
+  "excluded_samples": {
+    "topology_17_prestress": [
+      "sample_1"
+    ]
+  }
+}

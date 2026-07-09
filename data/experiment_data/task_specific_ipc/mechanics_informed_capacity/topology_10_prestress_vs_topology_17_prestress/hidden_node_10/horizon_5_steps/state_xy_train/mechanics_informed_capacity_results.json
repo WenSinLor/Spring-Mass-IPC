@@ -1,0 +1,37 @@
+{
+  "script": "compute_mechanics_informed_capacity.py",
+  "name": "mechanics-informed task-specific capacity",
+  "note": "This is not standard IPC.",
+  "selected_dictionary_paths": [
+    "/home/wensin/Documents/spring-mass-ipc/data/experiment_data/task_specific_ipc/mechanical_response_basis_calibration/topology_10_prestress/hidden_node_10/horizon_5_steps/selected_mechanical_response_dictionary.json",
+    "/home/wensin/Documents/spring-mass-ipc/data/experiment_data/task_specific_ipc/mechanical_response_basis_calibration/topology_17_prestress/hidden_node_10/horizon_5_steps/selected_mechanical_response_dictionary.json"
+  ],
+  "topologies": [
+    "topology_10_prestress",
+    "topology_17_prestress"
+  ],
+  "hidden_node": 10,
+  "reference_node": 0,
+  "horizon_steps": 5,
+  "washout_s": 5.0,
+  "train_s": 10.0,
+  "validation_s": 10.0,
+  "state_components": [
+    "x",
+    "y"
+  ],
+  "state_scaler": "train",
+  "capacity_alpha": 1e-06,
+  "capacity_target_window": "validation",
+  "task_weight_window": "train",
+  "actual_readout_alpha": 1e-06,
+  "clip_negative_capacity": true,
+  "mean_Q_mech_x_abs": 0.30906475877668776,
+  "mean_Q_mech_y_abs": 0.12803120895733772,
+  "mean_Q_mech_y_norm": 0.3303464715553944,
+  "mean_actual_nmse_x": 0.2899147490469532,
+  "mean_actual_nmse_y": 0.31173553401741405,
+  "mean_basis_nmse_x": 0.3633830701152179,
+  "mean_basis_nmse_y": 0.5869097932412806,
+  "interpretation": "Mechanics-informed capacity, basis adequacy, and actual readout performance show mixed evidence; inspect x/y panels and per-mode contributions."
+}

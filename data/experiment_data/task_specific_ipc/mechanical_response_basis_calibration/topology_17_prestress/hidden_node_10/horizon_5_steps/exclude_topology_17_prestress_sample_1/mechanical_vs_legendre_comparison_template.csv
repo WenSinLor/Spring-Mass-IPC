@@ -1,0 +1,5 @@
+topology,sample,mechanical_validation_nmse_x,mechanical_validation_nmse_y,mechanical_validation_nmse_2d,selected_drive_channels,drive_smoothing_frames,selected_K,selected_frequencies_hz,selected_filter_length_s,selected_mechanical_degree,number_linear_features,number_candidate_features,number_kept_features,selected_svd_rank,legendre_validation_nmse_x,legendre_validation_nmse_y,legendre_validation_nmse_2d,legendre_H_cut,legendre_D_cut
+topology_17_prestress,sample_0,0.3078190789395285,0.4176389422439469,0.3223841674947654,u,1,1,5.82,3.0,2,10,65,65,20,0.25470389214437616,0.9368955254037042,0.32536813668923453,2,1
+topology_17_prestress,sample_2,0.3087108645907301,0.4317567602571499,0.3252877427701542,u,1,1,5.82,3.0,2,10,65,65,20,0.25470389214437616,0.9368955254037042,0.32536813668923453,2,1
+topology_17_prestress,sample_3,0.31207982070046814,0.4347921275065633,0.32877538754010543,u,1,1,5.82,3.0,2,10,65,65,20,0.25470389214437616,0.9368955254037042,0.32536813668923453,2,1
+topology_17_prestress,sample_4,0.30939686663206456,0.43266360510935264,0.32608697084400873,u,1,1,5.82,3.0,2,10,65,65,20,0.25470389214437616,0.9368955254037042,0.32536813668923453,2,1

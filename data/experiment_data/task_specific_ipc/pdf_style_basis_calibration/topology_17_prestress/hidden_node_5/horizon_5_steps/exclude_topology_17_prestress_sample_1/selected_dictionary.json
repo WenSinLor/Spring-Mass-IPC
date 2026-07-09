@@ -1,0 +1,50 @@
+{
+  "script": "run_hidden_node_basis_selection.py",
+  "selection_protocol": "PDF-style holdout: fit train window, validate validation window",
+  "topologies": [
+    "topology_17_prestress"
+  ],
+  "amplitudes_by_topology": {
+    "topology_17_prestress": [
+      "amp=1"
+    ]
+  },
+  "hidden_node": 5,
+  "reference_node": 0,
+  "horizon_steps": 5,
+  "washout_s": 5.0,
+  "train_s": 10.0,
+  "validation_s": 10.0,
+  "ridge_alpha": 1e-06,
+  "H_cut": 1,
+  "D_cut": 1,
+  "readout_time_delays": [
+    0,
+    1
+  ],
+  "target_time_delays": [
+    5,
+    6
+  ],
+  "selected_validation_nmse_2d": 0.4058209686164888,
+  "global_best_H": 2,
+  "global_best_D": 1,
+  "global_best_validation_nmse_2d": 0.3894005601751601,
+  "selection_tolerance_nmse_2d": 0.40887058818391814,
+  "basis_adequacy_label": "weak",
+  "num_terms_selected": 2,
+  "representative_trace": {
+    "topology": "topology_17_prestress",
+    "amplitude": "amp=1",
+    "sample": "sample_0",
+    "validation_nmse_x": 0.3014423792804459,
+    "validation_nmse_y": 0.8876760253778396,
+    "validation_nmse_2d": 0.39899159282145874
+  },
+  "skipped": [],
+  "excluded_samples": {
+    "topology_17_prestress": [
+      "sample_1"
+    ]
+  }
+}
