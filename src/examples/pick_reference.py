@@ -19,7 +19,7 @@ from scipy.optimize import linear_sum_assignment
 from pathlib import Path
 
 # ── Point this at any one of your existing trial videos ───────
-SOURCE = "/home/wensin/Documents/spring-mass-ipc/data/camera_data/topology_17_prestress/C1562.MP4"
+SOURCE = "/home/wensin/Documents/spring-mass-ipc/data/camera_data/topology_18_prestress/C1598.MP4"
 
 # ── Same detection params as your main tracker ────────────────
 NUM_MARKERS = 16
@@ -30,8 +30,10 @@ MAX_AREA    = 35000
 BLUR_KERNEL = 5
 MORPH_SIZE  = 7
 
-RED_LOWER_1 = (0,   75,  80)
-RED_UPPER_1 = (10,  255, 255)
+# RED_LOWER_1 = (0,   75,  80)
+# RED_UPPER_1 = (10,  255, 255)
+RED_LOWER_1 = (170, 90, 55)
+RED_UPPER_1 = (180, 255, 255)
 RED_LOWER_2 = (165, 75,  80)
 RED_UPPER_2 = (180, 255, 255)
 # ──────────────────────────────────────────────────────────────

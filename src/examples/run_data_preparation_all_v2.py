@@ -36,14 +36,16 @@ GRID_COLS = 4
 # --- Paths ---
 current_script_dir  = Path(__file__).parent.resolve()
 DATA_DIR            = current_script_dir.parent.parent / "data"
-CAMERA_DATA_DIR     = DATA_DIR / "camera_data"     / "topology_17_prestress"
-SENSOR_DATA_DIR     = DATA_DIR / "vibrometer_data" / "topology_17_prestress"
-EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_17_prestress"
+CAMERA_DATA_DIR     = DATA_DIR / "camera_data"     / "topology_18_prestress"
+SENSOR_DATA_DIR     = DATA_DIR / "vibrometer_data" / "topology_18_prestress"
+EXPERIMENT_DATA_DIR = DATA_DIR / "experiment_data" / "topology_18_prestress"
 
 # --- HSV thresholds ---
 HSV_PARAMS = dict(
-    red_lower_1=(0,   120,  70),
-    red_upper_1=(10,  255, 255),
+    # red_lower_1=(0,   120,  70),
+    # red_upper_1=(10,  255, 255),
+    red_lower_1=(170,   120,  70),
+    red_upper_1=(180,  255, 255),
     red_lower_2=(170, 120,  70),
     red_upper_2=(180, 255, 255),
     blur_kernel=5,
@@ -52,8 +54,10 @@ HSV_PARAMS = dict(
 
 # --- Detection filters ---
 DETECTION_PARAMS = dict(
-    min_area=5000,
-    max_area=35000,
+    # min_area=5000,
+    # max_area=35000,
+    min_area=4000,
+    max_area=10000,
     circularity=0.01,
 )
 
@@ -347,25 +351,49 @@ VIDEO_FPS = 30000.0 / 1001.0   # fallback FPS if cap.get() returns 0
 # }
 
 # --- Topology 17 Prestress ---
+# REFERENCE_LAYOUTS = {
+
+#     "topology_17": {
+#         'M3': (2871.6, 172.1),
+#         'M0': (1037.2, 175.4),
+#         'M1': (1672.0, 274.1),
+#         'M2': (2249.5, 285.6),
+#         'M7': (2796.8, 820.2),
+#         'M4': (1134.3, 820.8),
+#         'M6': (2221.8, 833.1),
+#         'M5': (1699.3, 843.2),
+#         'M8': (1119.8, 1366.2),
+#         'M11': (2817.1, 1367.2),
+#         'M9': (1687.6, 1367.8),
+#         'M10': (2227.4, 1369.9),
+#         'M13': (1691.5, 1925.6),
+#         'M14': (2249.9, 1935.2),
+#         'M15': (2918.9, 2016.1),
+#         'M12': (1012.3, 2019.2),
+#     },
+
+# }
+
+# --- Topology 18 Prestress ---
 REFERENCE_LAYOUTS = {
 
-    "topology_17": {
-        'M3': (2871.6, 172.1),
-        'M0': (1037.2, 175.4),
-        'M1': (1672.0, 274.1),
-        'M2': (2249.5, 285.6),
-        'M7': (2796.8, 820.2),
-        'M4': (1134.3, 820.8),
-        'M6': (2221.8, 833.1),
-        'M5': (1699.3, 843.2),
-        'M8': (1119.8, 1366.2),
-        'M11': (2817.1, 1367.2),
-        'M9': (1687.6, 1367.8),
-        'M10': (2227.4, 1369.9),
-        'M13': (1691.5, 1925.6),
-        'M14': (2249.9, 1935.2),
-        'M15': (2918.9, 2016.1),
-        'M12': (1012.3, 2019.2),
+    "topology_18": {
+        'M0': (698.5, 150.1),
+        'M3': (1321.6, 176.1),
+        'M1': (911.4, 178.0),
+        'M2': (1114.7, 187.4),
+        'M4': (725.4, 347.0),
+        'M7': (1292.9, 355.3),
+        'M5': (912.9, 359.7),
+        'M6': (1112.2, 372.9),
+        'M8': (728.9, 543.2),
+        'M9': (914.8, 549.4),
+        'M10': (1108.1, 551.8),
+        'M11': (1301.1, 561.5),
+        'M13': (913.4, 734.8),
+        'M12': (690.6, 740.8),
+        'M14': (1119.6, 741.9),
+        'M15': (1321.0, 772.9),
     },
 
 }
